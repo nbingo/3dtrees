@@ -1,2 +1,2 @@
-# 3D-PhyloTrees
+# 3DPhyloTrees
 3D Phylogenetic Trees
