@@ -57,8 +57,8 @@ def read_preprocess_data():
     data_human = data_human.div(data_human.mean(axis=1).values, axis=0).add_prefix('H_').transpose()
 
     # Concatenate all the data
-    # data_all = pd.concat([data_mouse, data_chicken, data_human])
-    data_all = pd.concat([data_mouse, data_chicken])
+    data_all = pd.concat([data_mouse, data_chicken, data_human])
+    # data_all = pd.concat([data_mouse, data_chicken])
 
     return data_all
 
@@ -80,5 +80,8 @@ if __name__ == '__main__':
     agglomerate.fit(data.to_numpy())
 
     plt.title('Hierarchical clustering')
-    plot_dendrogram(agglomerate, truncate_mode='level')
+    plot_dendrogram(agglomerate, truncate_mode='level', labels=data.index)
+    plt.xticks(rotation=90)
+    plt.tight_layout()
+    plt.savefig('dendrogram.pdf')
     plt.show()
