@@ -4,6 +4,7 @@ import pandas as pd
 from matplotlib import pyplot as plt
 from scipy.cluster.hierarchy import dendrogram
 from sklearn.cluster import AgglomerativeClustering
+from scipy.stats import spearmanr
 
 
 def plot_dendrogram(model, **kwargs):
@@ -65,7 +66,17 @@ def read_preprocess_data():
 if __name__ == '__main__':
     data = read_preprocess_data()
 
-    model = AgglomerativeClustering(linkage='complete', n_clusters=None, distance_threshold=0)
+    def spearmanr_connectivity(X):
+        # data is assumed to be (n_variables, n_examples)
+        rho, _ = spearmanr(X, axis=1)
+        return 1 - rho
+
+    model = AgglomerativeClustering(
+        affinity=spearmanr_connectivity,
+        linkage='complete',
+        n_clusters=None,
+        distance_threshold=0
+    )
     model.fit(data.to_numpy())
 
     plt.title('Hierarchical clustering')
