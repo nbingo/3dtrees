@@ -30,16 +30,13 @@ def plot_dendrogram(model, **kwargs):
 
 
 def read_preprocess_data():
-    deg_chicken = pd.read_csv('TranscriptomeData/Nomi_chickenDEGs.csv', header=0)
-    deg_chicken = deg_chicken.rename(columns={'Unnamed: 0': 'Name'})
+    deg_chicken = pd.read_csv('TranscriptomeData/Nomi_chickenDEGs.csv', header=0, index_col=0)
     data_chicken = pd.read_csv('TranscriptomeData/Nomi_chickenallaverage.csv', header=0, index_col=0)
 
-    deg_mouse = pd.read_csv('TranscriptomeData/Nomi_mouseDEGs.csv', header=0)
-    deg_mouse = deg_mouse.rename(columns={'Unnamed: 0': 'Name'})
+    deg_mouse = pd.read_csv('TranscriptomeData/Nomi_mouseDEGs.csv', header=0, index_col=0)
     data_mouse = pd.read_csv('TranscriptomeData/Nomi_mouseallaverage.csv', header=0, index_col=0)
 
-    deg_human = pd.read_csv('TranscriptomeData/Nomi_humanDEGs.csv', header=0)
-    deg_human = deg_human.rename(columns={'Unnamed: 0': 'Name'})
+    deg_human = pd.read_csv('TranscriptomeData/Nomi_humanDEGs.csv', header=0, index_col=0)
     data_human = pd.read_csv('TranscriptomeData/Nomi_humanallaverage.csv', header=0, index_col=0)
 
     # Find the common DEGs
