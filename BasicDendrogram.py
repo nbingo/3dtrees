@@ -66,19 +66,19 @@ def read_preprocess_data():
 if __name__ == '__main__':
     data = read_preprocess_data()
 
-    def spearmanr_connectivity(X):
+    def spearmanr_connectivity(x):
         # data is assumed to be (n_variables, n_examples)
-        rho, _ = spearmanr(X, axis=1)
+        rho, _ = spearmanr(x, axis=1)
         return 1 - rho
 
-    model = AgglomerativeClustering(
+    agglomerate = AgglomerativeClustering(
         affinity=spearmanr_connectivity,
         linkage='complete',
         n_clusters=None,
         distance_threshold=0
     )
-    model.fit(data.to_numpy())
+    agglomerate.fit(data.to_numpy())
 
     plt.title('Hierarchical clustering')
-    plot_dendrogram(model, truncate_mode='level')
+    plot_dendrogram(agglomerate, truncate_mode='level')
     plt.show()
