@@ -2,9 +2,13 @@ import numpy as np
 import pandas as pd
 
 from matplotlib import pyplot as plt
+from matplotlib import rcParams
+
 from scipy.cluster.hierarchy import dendrogram
-from sklearn.cluster import AgglomerativeClustering
 from scipy.stats import spearmanr
+from sklearn.cluster import AgglomerativeClustering
+
+rcParams.update({'figure.autolayout': True})
 
 
 def plot_dendrogram(model, **kwargs):
@@ -63,10 +67,12 @@ def read_preprocess_data():
 if __name__ == '__main__':
     data = read_preprocess_data()
 
+
     def spearmanr_connectivity(x):
         # data is assumed to be (n_variables, n_examples)
         rho, _ = spearmanr(x, axis=1)
         return 1 - rho
+
 
     agglomerate = AgglomerativeClustering(
         affinity=spearmanr_connectivity,
