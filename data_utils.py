@@ -35,3 +35,7 @@ def read_data(preprocess: bool = True):
     # data_all = pd.concat(([data_human]))
 
     return data_all
+
+
+def get_region(ct_name: str):
+    return ct_name.split('.')[1]
