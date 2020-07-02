@@ -1,7 +1,8 @@
 from dataclasses import dataclass
-from typing import List, Callable, Union
+from typing import List, Callable, Union, Dict
 from queue import PriorityQueue
 from data_utils import get_region
+from itertools import combinations
 import functools
 import numpy as np
 import pandas as pd
@@ -12,7 +13,13 @@ class CellType:
     id_num: int
     region: int
     transcriptome: np.array = None
-    num_children: int = 0
+
+    @property
+    def num_original(self):
+        if len(self.transcriptome.shape) == 1:
+            return 1
+        else:
+            return self.transcriptome.shape[0]
 
 
 @dataclass
@@ -54,13 +61,28 @@ class Agglomerate3D:
         self.linkage_mat = pd.DataFrame({'Is region': [], 'ID1': [], 'ID2': [], 'Distance': [], 'Num children': []})
 
     def agglomerate(self, data: pd.DataFrame) -> pd.DataFrame:
-        cell_types = []
-        ct_dists = PriorityQueue()
-        r_dists = PriorityQueue()
+        ct_dists: PriorityQueue[CellType] = PriorityQueue()
+        r_dists: PriorityQueue[Region] = PriorityQueue()
 
         ct_names = data.index.values
         ct_regions = np.vectorize(get_region)(ct_names)
         r_names = np.unique(ct_regions)
-        region_to_id = {i: r_names[i] for i in range(r_names.shape[0])}
+        region_to_id: Dict[str, int] = {r_names[i]: i for i in range(r_names.shape[0])}
 
-        regions = {r: Region(r) for r in range(len(r_names))}
+        # Building initial regions and cell types
+        regions: Dict[int, Region] = {r: Region(r) for r in range(len(r_names))}
+        data_plain = data.to_numpy()
+
+        cell_types: Dict[int, CellType] = {}
+        for c in range(len(ct_names)):
+            r_id = region_to_id[ct_regions[c]]
+            cell_types[c] = CellType(c, r_id, data_plain[c])
+            regions[r_id].cell_types.append(cell_types[c])
+
+        # Compute distances of all possible edges between cell types in the same region
+        for region in regions.values():
+            for ct1, ct2 in combinations(region.cell_types, 2):
+                dists = np.zeros((ct1.num_original, ct2.num_original))
+                # Compute distance matrix
+                # essentially only useful if this is working on merged cell types
+                # otherwise just produces a matrix containing one value
