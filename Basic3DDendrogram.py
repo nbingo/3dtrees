@@ -163,3 +163,5 @@ class Agglomerate3D:
 
                 # Create new cell type and remove the old ones
                 cell_types[ct_id_idx] = CellType(ct_id_idx, ct1.region, np.stack((ct1.transcriptome, ct2.transcriptome)))
+                cell_types.pop(ct1.id_num)
+                cell_types.pop(ct2.id_num)
