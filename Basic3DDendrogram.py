@@ -12,13 +12,17 @@ import pandas as pd
 class CellType:
     id_num: int
     region: int
-    _transcriptome: np.array = None
+    _transcriptome: np.array
 
     @property
     def transcriptome(self) -> np.array:
         if len(self._transcriptome.shape) == 1:
             return self._transcriptome.reshape(1, -1)
         return self._transcriptome
+
+    # @transcriptome.setter
+    # def transcriptome(self, t: np.array):
+    #     self._transcriptome = t
 
     @property
     def num_original(self):
@@ -57,6 +61,8 @@ class Edge:
 
 LINKAGE_CELL_OPTIONS   = ['single', 'complete', 'average']
 LINKAGE_REGION_OPTIONS = ['single', 'complete', 'average']
+
+
 class Agglomerate3D:
     def __init__(self, cell_type_affinity: Callable, region_affinity: Callable, linkage_cell: str, linkage_region: str):
         self.cell_type_affinity = cell_type_affinity
@@ -132,6 +138,7 @@ class Agglomerate3D:
                     # add the edge with the desired distance to the priority queue
                     ct_dists.put(Edge(dist, ct1, ct2))
 
+            # compute distances between mergeable regions
             for r1, r2 in combinations(regions.values(), 2):
                 # condition for merging regions
                 # currently must have same number of cell types
@@ -141,3 +148,18 @@ class Agglomerate3D:
 
                 dist = self._compute_region_dist(r1, r2)
                 r_dists.put(Edge(dist, r1, r2))
+
+            # Now go on to merge step!
+            # Decide whether we're merging cell types or regions
+            ct_edge = ct_dists.get()
+            r_edge = r_dists.get()
+
+            # we're merging cell types, which gets a slight preference if equal
+            if ct_edge.dist <= r_edge.dist:
+                ct1 = ct_edge.endpt1
+                ct2 = ct_edge.endpt2
+                # of course, assumed to be in the same region
+                assert ct1.region == ct2.region
+
+                # Create new cell type and remove the old ones
+                cell_types[ct_id_idx] = CellType(ct_id_idx, ct1.region, np.stack((ct1.transcriptome, ct2.transcriptome)))
