@@ -96,6 +96,8 @@ class Agglomerate3D:
         self.cell_types: Dict[int, CellType] = {}
         self.ct_id_idx: int = 0
         self.r_id_idx: int = 0
+        self.ct_names: List[str] = []
+        self.r_names: List[str] = []
         if linkage_cell not in LINKAGE_CELL_OPTIONS:
             raise UserWarning(f'Incorrect argument passed in for cell linkage. Must be one of {LINKAGE_CELL_OPTIONS}')
         if linkage_region not in LINKAGE_REGION_OPTIONS:
@@ -230,23 +232,42 @@ class Agglomerate3D:
                                      'Num original': num_orig
                                      })
 
+    @property
+    def linkage_mat_readable(self):
+        lm = self.linkage_mat.copy()
+        id_to_ct = {i: self.ct_names[i] for i in range(len(self.ct_names))}
+        id_to_r = {i: self.r_names[i] for i in range(len(self.r_names))}
+        for i in lm.index:
+            if lm.loc[i, 'Is region']:
+                if lm.loc[i, 'ID1'] in id_to_r:
+                    lm.loc[i, 'ID1'] = id_to_r[lm.loc[i, 'ID1']]
+                if lm.loc[i, 'ID2'] in id_to_r:
+                    lm.loc[i, 'ID2'] = id_to_r[lm.loc[i, 'ID2']]
+            else:
+                if lm.loc[i, 'ID1'] in id_to_ct:
+                    lm.loc[i, 'ID1'] = id_to_ct[lm.loc[i, 'ID1']]
+                if lm.loc[i, 'ID2'] in id_to_ct:
+                    lm.loc[i, 'ID2'] = id_to_ct[lm.loc[i, 'ID2']]
+
+        return lm
+
     def agglomerate(self, data: pd.DataFrame) -> pd.DataFrame:
-        ct_names = data.index.values
-        ct_regions = np.vectorize(get_region)(ct_names)
-        r_names = np.unique(ct_regions)
-        region_to_id: Dict[str, int] = {r_names[i]: i for i in range(r_names.shape[0])}
+        self.ct_names = data.index.values
+        ct_regions = np.vectorize(get_region)(self.ct_names)
+        self.r_names = np.unique(ct_regions)
+        region_to_id: Dict[str, int] = {self.r_names[i]: i for i in range(len(self.r_names))}
 
         # Building initial regions and cell types
-        self.regions = {r: Region(r) for r in range(len(r_names))}
+        self.regions = {r: Region(r) for r in range(len(self.r_names))}
         data_plain = data.to_numpy()
 
-        for c in range(len(ct_names)):
+        for c in range(len(self.ct_names)):
             r_id = region_to_id[ct_regions[c]]
             self.cell_types[c] = CellType(c, r_id, data_plain[c])
             self.regions[r_id].cell_types[c] = self.cell_types[c]
 
-        self.ct_id_idx = len(ct_names)
-        self.r_id_idx = len(r_names)
+        self.ct_id_idx = len(self.ct_names)
+        self.r_id_idx = len(self.r_names)
 
         # repeat until we're left with one region and one cell type
         # not necessarily true evolutionarily, but same assumption as normal dendrogram

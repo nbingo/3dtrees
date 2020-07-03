@@ -19,4 +19,4 @@ if __name__ == '__main__':
 
     agglomerate.agglomerate(data)
 
-    print(agglomerate.linkage_mat)
+    print(agglomerate.linkage_mat_readable)
