@@ -3,14 +3,24 @@ from typing import List, Callable, Union, Dict
 from queue import PriorityQueue
 from data_utils import get_region
 from itertools import combinations, product
+from abc import ABC, abstractmethod
 import functools
 import numpy as np
 import pandas as pd
 
 
 @dataclass
-class CellType:
+class Node(ABC):
     id_num: int
+
+    @property
+    @abstractmethod
+    def num_original(self):
+        pass
+
+
+@dataclass
+class CellType(Node):
     region: int
     _transcriptome: np.array
 
@@ -33,8 +43,7 @@ class CellType:
 
 
 @dataclass
-class Region:
-    id_num: int
+class Region(Node):
     cell_types: Dict[int, CellType] = field(default_factory=dict)
 
     @property
@@ -141,14 +150,7 @@ class Agglomerate3D:
                                                    np.row_stack((ct1.transcriptome, ct2.transcriptome)))
         self.regions[region_id].cell_types[self.ct_id_idx] = self.cell_types[self.ct_id_idx]
 
-        # record merger in linkage history
-        self.linkage_history.append({'Is region': False,
-                                     'ID1': ct1.id_num,
-                                     'ID2': ct2.id_num,
-                                     'new ID': self.ct_id_idx,
-                                     'Distance': ct_dist,
-                                     'Num original': self.cell_types[self.ct_id_idx].num_original
-                                     })
+        self._record_link(ct1, ct2, self.ct_id_idx, ct_dist)
 
         # remove the old ones
         self.cell_types.pop(ct1.id_num)
@@ -201,14 +203,7 @@ class Agglomerate3D:
         self.regions.pop(r1.id_num)
         self.regions.pop(r2.id_num)
 
-        # record merger in linkage history
-        self.linkage_history.append({'Is region': True,
-                                     'ID1': r1.id_num,
-                                     'ID2': r2.id_num,
-                                     'new ID': self.r_id_idx,
-                                     'Distance': r_dist,
-                                     'Num original': self.regions[self.r_id_idx].num_original
-                                     })
+        self._record_link(r1, r2, self.r_id_idx, r_dist)
 
         if self.verbose:
             print(f'Merged regions {r1} and {r2} with distance {r_dist} to form '
@@ -217,6 +212,23 @@ class Agglomerate3D:
 
         self.r_id_idx += 1
         return self.r_id_idx - 1
+
+    def _record_link(self, n1: Node, n2: Node, new_id: int, dist: float):
+        # Must be recording the linkage of two things of the same type
+        assert type(n1) is type(n2)
+
+        # record merger in linkage history
+        if type(n1) is Region:
+            num_orig = self.regions[new_id].num_original
+        else:
+            num_orig = self.cell_types[new_id].num_original
+        self.linkage_history.append({'Is region': isinstance(n1, Region),
+                                     'ID1': n1.id_num,
+                                     'ID2': n2.id_num,
+                                     'new ID': new_id,
+                                     'Distance': dist,
+                                     'Num original': num_orig
+                                     })
 
     def agglomerate(self, data: pd.DataFrame) -> pd.DataFrame:
         ct_names = data.index.values
