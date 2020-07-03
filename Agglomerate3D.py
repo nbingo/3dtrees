@@ -28,6 +28,9 @@ class CellType:
     def num_original(self):
         return self.transcriptome.shape[0]
 
+    def __repr__(self):
+        return f'{self.region}.{self.id_num}'
+
 
 @dataclass
 class Region:
@@ -47,6 +50,9 @@ class Region:
     @property
     def num_original(self):
         return np.sum([ct.num_original for ct in self.cell_types.values()])
+
+    def __repr__(self):
+        return f'{self.id_num}{list(self.cell_types.values())}'
 
 
 @functools.total_ordering
@@ -71,10 +77,11 @@ LINKAGE_REGION_OPTIONS = ['single', 'complete', 'average']
 
 
 class Agglomerate3D:
-    def __init__(self, cell_type_affinity: Callable, linkage_cell: str, linkage_region: str):
+    def __init__(self, cell_type_affinity: Callable, linkage_cell: str, linkage_region: str, verbose: bool = False):
         self.cell_type_affinity = cell_type_affinity
         self.linkage_cell = linkage_cell
         self.linkage_region = linkage_region
+        self.verbose = verbose
         self.linkage_history: List[Dict[str, int]] = []
         self.regions: Dict[int, Region] = {}
         self.cell_types: Dict[int, CellType] = {}
@@ -122,26 +129,42 @@ class Agglomerate3D:
 
         return dist
 
-    def _merge_cell_types(self, ct1, ct2, ct_dist):
+    def _merge_cell_types(self, ct1: CellType, ct2: CellType, ct_dist: float, region_id: int = None):
+        # must be in same region if not being created into a new region
+        if region_id is None:
+            assert ct1.region == ct2.region
+            region_id = ct1.region
+
         # Create new cell type and assign to region
         self.cell_types[self.ct_id_idx] = CellType(self.ct_id_idx,
-                                                   ct1.region,
+                                                   region_id,
                                                    np.row_stack((ct1.transcriptome, ct2.transcriptome)))
-        self.regions[ct1.region].cell_types[self.ct_id_idx] = self.cell_types[self.ct_id_idx]
+        self.regions[region_id].cell_types[self.ct_id_idx] = self.cell_types[self.ct_id_idx]
+
         # record merger in linkage history
         self.linkage_history.append({'Is region': False,
                                      'ID1': ct1.id_num,
                                      'ID2': ct2.id_num,
+                                     'new ID': self.ct_id_idx,
                                      'Distance': ct_dist,
-                                     'Num original': ct1.num_original + ct2.num_original
+                                     'Num original': self.cell_types[self.ct_id_idx].num_original
                                      })
-        # increment cell type counter
-        self.ct_id_idx += 1
+
         # remove the old ones
         self.cell_types.pop(ct1.id_num)
         self.cell_types.pop(ct2.id_num)
         self.regions[ct1.region].cell_types.pop(ct1.id_num)
-        self.regions[ct1.region].cell_types.pop(ct2.id_num)
+        self.regions[ct2.region].cell_types.pop(ct2.id_num)
+
+        if self.verbose:
+            print(f'Merged cell types {ct1} and {ct2} with distance {ct_dist} '
+                  f'to form cell type {self.cell_types[self.ct_id_idx]} with {ct1.num_original + ct2.num_original} '
+                  f'original data points.\n'
+                  f'New cell type dict: {self.cell_types}\n'
+                  f'New region dict: {self.regions}\n')
+
+        # increment cell type counter
+        self.ct_id_idx += 1
 
         # return id of newly created cell type
         return self.ct_id_idx - 1  # yeah, this is ugly b/c python doesn't have ++ct_id_idx
@@ -149,6 +172,10 @@ class Agglomerate3D:
     def _merge_regions(self, r1, r2, r_dist):
         r1_ct_list = list(r1.cell_types.values())
         r2_ct_list = list(r2.cell_types.values())
+
+        if self.verbose:
+            print(f'Merging regions {r1} and {r2} into new region {self.r_id_idx}\n{{')
+
         # create new region
         self.regions[self.r_id_idx] = Region(self.r_id_idx)
         pairwise_r_ct_dists = np.zeros((len(r1.cell_types), len(r2.cell_types)))
@@ -161,7 +188,7 @@ class Agglomerate3D:
                                                             pairwise_r_ct_dists.shape)
             # create new cell type, delete old ones and remove from their regions
             new_ct_id = self._merge_cell_types(r1_ct_list[ct_merge1_idx], r2_ct_list[ct_merge2_idx],
-                                               pairwise_r_ct_dists.min())
+                                               pairwise_r_ct_dists.min(), self.r_id_idx)
 
             # remove from the distance matrix
             pairwise_r_ct_dists = np.delete(pairwise_r_ct_dists, ct_merge1_idx, axis=0)
@@ -178,9 +205,15 @@ class Agglomerate3D:
         self.linkage_history.append({'Is region': True,
                                      'ID1': r1.id_num,
                                      'ID2': r2.id_num,
+                                     'new ID': self.r_id_idx,
                                      'Distance': r_dist,
-                                     'Num original': r1.num_original + r2.num_original
+                                     'Num original': self.regions[self.r_id_idx].num_original
                                      })
+
+        if self.verbose:
+            print(f'Merged regions {r1} and {r2} with distance {r_dist} to form '
+                  f'{self.regions[self.r_id_idx]} with {self.regions[self.r_id_idx].num_original} original data points.'
+                  f'\nNew region dict: {self.regions}\n}}\n')
 
         self.r_id_idx += 1
         return self.r_id_idx - 1
@@ -229,21 +262,21 @@ class Agglomerate3D:
 
             # Now go on to merge step!
             # Decide whether we're merging cell types or regions
-            ct_edge = ct_dists.get()
-            r_edge = r_dists.get()
+            ct_edge = ct_dists.get() if not ct_dists.empty() else None
+            r_edge = r_dists.get() if not r_dists.empty() else None
+
+            # both shouldn't be None
+            assert not (ct_edge is None and r_edge is None)
 
             # we're merging cell types, which gets a slight preference if equal
-            if ct_edge.dist <= r_edge.dist:
+            if ct_edge is not None and (ct_edge.dist <= r_edge.dist):
                 ct1 = ct_edge.endpt1
                 ct2 = ct_edge.endpt2
-
-                # of course, assumed to be in the same region
-                assert ct1.region == ct2.region
 
                 self._merge_cell_types(ct1, ct2, ct_edge.dist)
 
             # we're merging regions
-            else:
+            elif r_edge is not None:
                 # First, we have to match up homologous cell types
                 # Just look for closest pairs and match them up
                 r1 = r_edge.endpt1

@@ -13,7 +13,8 @@ if __name__ == '__main__':
     agglomerate = Agglomerate3D(
         cell_type_affinity=spearmanr_connectivity,
         linkage_cell='complete',
-        linkage_region='complete'
+        linkage_region='complete',
+        verbose=True
     )
 
     agglomerate.agglomerate(data)
