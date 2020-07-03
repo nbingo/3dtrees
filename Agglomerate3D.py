@@ -66,7 +66,7 @@ class Edge:
         return self.dist > other.dist
 
 
-LINKAGE_CELL_OPTIONS   = ['single', 'complete', 'average']
+LINKAGE_CELL_OPTIONS = ['single', 'complete', 'average']
 LINKAGE_REGION_OPTIONS = ['single', 'complete', 'average']
 
 
@@ -114,7 +114,7 @@ class Agglomerate3D:
             dist = ct_dists.min()
         elif self.linkage_region == 'complete':
             dist = ct_dists.max()
-        else:   # default to 'average':
+        else:  # default to 'average':
             dist = ct_dists.mean()
 
         return dist
@@ -122,8 +122,8 @@ class Agglomerate3D:
     def _merge_cell_types(self, ct1, ct2, ct_dist):
         # Create new cell type and assign to region
         self.cell_types[self.ct_id_idx] = CellType(self.ct_id_idx,
-                                              ct1.region,
-                                              np.stack((ct1.transcriptome, ct2.transcriptome)))
+                                                   ct1.region,
+                                                   np.stack((ct1.transcriptome, ct2.transcriptome)))
         self.regions[ct1.region].cell_types[self.ct_id_idx] = self.cell_types[self.ct_id_idx]
         # record merger in linkage history
         self.linkage_history.append({'Is region': False,
@@ -141,7 +141,7 @@ class Agglomerate3D:
         self.regions[ct1.region].cell_types.pop(ct2.id_num)
 
         # return id of newly created cell type
-        return self.ct_id_idx - 1   # yeah, this is ugly b/c python doesn't have ++ct_id_idx
+        return self.ct_id_idx - 1  # yeah, this is ugly b/c python doesn't have ++ct_id_idx
 
     def _merge_regions(self, r1, r2, r_dist):
         r1_ct_list = list(r1.cell_types.values())
