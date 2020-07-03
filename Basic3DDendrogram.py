@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import List, Callable, Union, Dict
 from queue import PriorityQueue
 from data_utils import get_region
@@ -32,13 +32,16 @@ class CellType:
 @dataclass
 class Region:
     id_num: int
-    cell_types: List[CellType] = None
+    cell_types: Dict[int, CellType] = field(default_factory=dict)
 
     @property
     def transcriptomes(self) -> np.array:
-        transcriptomes = np.zeros((len(self.cell_types), self.cell_types[0].transcriptome.shape[1]))
+        # ugly -- should refactor something
+        ct_list = list(self.cell_types.values())
+        transcriptome_length = ct_list[0].transcriptome.shape[1]
+        transcriptomes = np.zeros((len(self.cell_types), transcriptome_length))
         for c in range(len(self.cell_types)):
-            transcriptomes[c] = self.cell_types[c].transcriptome
+            transcriptomes[c] = ct_list[c].transcriptome
         return transcriptomes
 
 
@@ -69,7 +72,11 @@ class Agglomerate3D:
         self.region_affinity = region_affinity
         self.linkage_cell = linkage_cell
         self.linkage_region = linkage_region
-        self.linkage_mat = pd.DataFrame({'Is region': [], 'ID1': [], 'ID2': [], 'Distance': [], 'Num children': []})
+        self.linkage_history: List[Dict[str, int]] = []
+        self.regions: Dict[int, Region] = {}
+        self.cell_types: Dict[int, CellType] = {}
+        self.ct_id_idx: int = 0
+        self.r_id_idx: int = 0
         if linkage_cell not in LINKAGE_CELL_OPTIONS:
             raise UserWarning(f'Incorrect argument passed in for cell linkage. Must be one of {LINKAGE_CELL_OPTIONS}')
         if linkage_region not in LINKAGE_REGION_OPTIONS:
@@ -94,8 +101,10 @@ class Agglomerate3D:
 
     def _compute_region_dist(self, r1: Region, r2: Region) -> np.float64:
         ct_dists = np.zeros((len(r1.cell_types), len(r2.cell_types)))
+        r1_ct_list = list(r1.cell_types.values())
+        r2_ct_list = list(r2.cell_types.values())
         for r1_idx, r2_idx in product(range(len(r1.cell_types)), range(len(r2.cell_types))):
-            ct_dists[r1_idx, r2_idx] = self._compute_ct_dist(r1.cell_types[r1_idx], r2.cell_types[r2_idx])
+            ct_dists[r1_idx, r2_idx] = self._compute_ct_dist(r1_ct_list[r1_idx], r2_ct_list[r2_idx])
 
         if self.linkage_region == 'single':
             dist = ct_dists.min()
@@ -105,6 +114,61 @@ class Agglomerate3D:
             dist = ct_dists.mean()
 
         return dist
+
+    def _merge_cell_types(self, ct1, ct2, ct_dist):
+        # Create new cell type and assign to region
+        self.cell_types[self.ct_id_idx] = CellType(self.ct_id_idx,
+                                              ct1.region,
+                                              np.stack((ct1.transcriptome, ct2.transcriptome)))
+        self.regions[ct1.region].cell_types[self.ct_id_idx] = self.cell_types[self.ct_id_idx]
+        # record merger in linkage history
+        self.linkage_history.append({'Is region': False,
+                                     'ID1': ct1.id_num,
+                                     'ID2': ct2.id_num,
+                                     'Distance': ct_dist,
+                                     'Num original': ct1.num_original + ct2.num_original
+                                     })
+        # increment cell type counter
+        self.ct_id_idx += 1
+        # remove the old ones
+        self.cell_types.pop(ct1.id_num)
+        self.cell_types.pop(ct2.id_num)
+        self.regions[ct1.region].cell_types.pop(ct1.id_num)
+        self.regions[ct1.region].cell_types.pop(ct2.id_num)
+
+        # return id of newly created cell type
+        return self.ct_id_idx - 1   # yeah, this is ugly b/c python doesn't have ++ct_id_idx
+
+    def _merge_regions(self, r1, r2):
+        r1_ct_list = list(r1.cell_types.values())
+        r2_ct_list = list(r2.cell_types.values())
+        # create new region
+        self.regions[self.r_id_idx] = Region(self.r_id_idx)
+        pairwise_r_ct_dists = np.zeros((len(r1.cell_types), len(r2.cell_types)))
+        for r1_ct_idx, r2_ct_idx in product(range(len(r1_ct_list)), range(len(r2_ct_list))):
+            pairwise_r_ct_dists[r1_ct_idx, r2_ct_list] = self._compute_ct_dist(r1_ct_list[r1_ct_idx],
+                                                                               r2_ct_list[r2_ct_idx])
+        # Continuously pair up cell types, merge them, add them to the new region, and delete them
+        while np.prod(pairwise_r_ct_dists.shape) != 0:
+            ct_merge1_idx, ct_merge2_idx = np.unravel_index(np.argmin(pairwise_r_ct_dists),
+                                                            pairwise_r_ct_dists.shape)
+            # create new cell type, delete old ones and remove from their regions
+            new_ct_id = self._merge_cell_types(r1_ct_list[ct_merge1_idx], r2_ct_list[ct_merge2_idx],
+                                               pairwise_r_ct_dists.min())
+
+            # remove from the distance matrix
+            pairwise_r_ct_dists = np.delete(pairwise_r_ct_dists, ct_merge1_idx, axis=0)
+            pairwise_r_ct_dists = np.delete(pairwise_r_ct_dists, ct_merge2_idx, axis=1)
+
+            # add to our new region
+            self.regions[self.r_id_idx].cell_types[new_ct_id] = self.cell_types[new_ct_id]
+        # make sure no cell types are leftover in the regions we're about to delete
+        assert len(r1.cell_types) == 0 and len(r2.cell_types) == 0
+        self.regions.pop(r1.id_num)
+        self.regions.pop(r2.id_num)
+
+        self.r_id_idx += 1
+        return self.r_id_idx - 1
 
     def agglomerate(self, data: pd.DataFrame) -> pd.DataFrame:
         ct_dists: PriorityQueue[Edge] = PriorityQueue()
@@ -116,30 +180,29 @@ class Agglomerate3D:
         region_to_id: Dict[str, int] = {r_names[i]: i for i in range(r_names.shape[0])}
 
         # Building initial regions and cell types
-        regions: Dict[int, Region] = {r: Region(r) for r in range(len(r_names))}
+        self.regions = {r: Region(r) for r in range(len(r_names))}
         data_plain = data.to_numpy()
 
-        cell_types: Dict[int, CellType] = {}
         for c in range(len(ct_names)):
             r_id = region_to_id[ct_regions[c]]
-            cell_types[c] = CellType(c, r_id, data_plain[c])
-            regions[r_id].cell_types.append(cell_types[c])
+            self.cell_types[c] = CellType(c, r_id, data_plain[c])
+            self.regions[r_id].cell_types[c] = self.cell_types[c]
 
-        ct_id_idx = len(ct_names)
-        r_id_idx = len(r_names)
+        self.ct_id_idx = len(ct_names)
+        self.r_id_idx = len(r_names)
 
         # repeat until we're left with one region and one cell type
         # not necessarily true evolutionarily, but same assumption as normal dendrogram
-        while len(regions) > 1 or len(cell_types) > 1:
+        while len(self.regions) > 1 or len(self.cell_types) > 1:
             # Compute distances of all possible edges between cell types in the same region
-            for region in regions.values():
-                for ct1, ct2 in combinations(region.cell_types, 2):
+            for region in self.regions.values():
+                for ct1, ct2 in combinations(list(region.cell_types.values()), 2):
                     dist = self._compute_ct_dist(ct1, ct2)
                     # add the edge with the desired distance to the priority queue
                     ct_dists.put(Edge(dist, ct1, ct2))
 
             # compute distances between mergeable regions
-            for r1, r2 in combinations(regions.values(), 2):
+            for r1, r2 in combinations(self.regions.values(), 2):
                 # condition for merging regions
                 # currently must have same number of cell types
                 # so that when regions are merged, each cell type is assumed to have an exact homolog
@@ -156,12 +219,21 @@ class Agglomerate3D:
 
             # we're merging cell types, which gets a slight preference if equal
             if ct_edge.dist <= r_edge.dist:
+                ct_dist = ct_edge.dist
                 ct1 = ct_edge.endpt1
                 ct2 = ct_edge.endpt2
+
                 # of course, assumed to be in the same region
                 assert ct1.region == ct2.region
 
-                # Create new cell type and remove the old ones
-                cell_types[ct_id_idx] = CellType(ct_id_idx, ct1.region, np.stack((ct1.transcriptome, ct2.transcriptome)))
-                cell_types.pop(ct1.id_num)
-                cell_types.pop(ct2.id_num)
+                self._merge_cell_types(ct1, ct2, ct_dist)
+
+            # we're merging regions
+            else:
+                # First, we have to match up homologous cell types
+                # Just look for closest pairs and match them up
+                r1 = r_edge.endpt1
+                r2 = r_edge.endpt2
+                self._merge_regions(r1, r2)
+
+        return pd.DataFrame(self.linkage_history)
