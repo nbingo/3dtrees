@@ -44,6 +44,10 @@ class Region:
             transcriptomes[c] = ct_list[c].transcriptome
         return transcriptomes
 
+    @property
+    def num_original(self):
+        return np.sum([ct.num_original for ct in self.cell_types.values()])
+
 
 @functools.total_ordering
 @dataclass
@@ -139,7 +143,7 @@ class Agglomerate3D:
         # return id of newly created cell type
         return self.ct_id_idx - 1   # yeah, this is ugly b/c python doesn't have ++ct_id_idx
 
-    def _merge_regions(self, r1, r2):
+    def _merge_regions(self, r1, r2, r_dist):
         r1_ct_list = list(r1.cell_types.values())
         r2_ct_list = list(r2.cell_types.values())
         # create new region
@@ -166,6 +170,14 @@ class Agglomerate3D:
         assert len(r1.cell_types) == 0 and len(r2.cell_types) == 0
         self.regions.pop(r1.id_num)
         self.regions.pop(r2.id_num)
+
+        # record merger in linkage history
+        self.linkage_history.append({'Is region': True,
+                                     'ID1': r1.id_num,
+                                     'ID2': r2.id_num,
+                                     'Distance': r_dist,
+                                     'Num original': r1.num_original + r2.num_original
+                                     })
 
         self.r_id_idx += 1
         return self.r_id_idx - 1
@@ -219,14 +231,13 @@ class Agglomerate3D:
 
             # we're merging cell types, which gets a slight preference if equal
             if ct_edge.dist <= r_edge.dist:
-                ct_dist = ct_edge.dist
                 ct1 = ct_edge.endpt1
                 ct2 = ct_edge.endpt2
 
                 # of course, assumed to be in the same region
                 assert ct1.region == ct2.region
 
-                self._merge_cell_types(ct1, ct2, ct_dist)
+                self._merge_cell_types(ct1, ct2, ct_edge.dist)
 
             # we're merging regions
             else:
@@ -234,6 +245,6 @@ class Agglomerate3D:
                 # Just look for closest pairs and match them up
                 r1 = r_edge.endpt1
                 r2 = r_edge.endpt2
-                self._merge_regions(r1, r2)
+                self._merge_regions(r1, r2, r_edge.dist)
 
         return pd.DataFrame(self.linkage_history)
