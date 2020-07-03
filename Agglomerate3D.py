@@ -126,7 +126,7 @@ class Agglomerate3D:
         # Create new cell type and assign to region
         self.cell_types[self.ct_id_idx] = CellType(self.ct_id_idx,
                                                    ct1.region,
-                                                   np.stack((ct1.transcriptome, ct2.transcriptome)))
+                                                   np.row_stack((ct1.transcriptome, ct2.transcriptome)))
         self.regions[ct1.region].cell_types[self.ct_id_idx] = self.cell_types[self.ct_id_idx]
         # record merger in linkage history
         self.linkage_history.append({'Is region': False,
@@ -153,7 +153,7 @@ class Agglomerate3D:
         self.regions[self.r_id_idx] = Region(self.r_id_idx)
         pairwise_r_ct_dists = np.zeros((len(r1.cell_types), len(r2.cell_types)))
         for r1_ct_idx, r2_ct_idx in product(range(len(r1_ct_list)), range(len(r2_ct_list))):
-            pairwise_r_ct_dists[r1_ct_idx, r2_ct_list] = self._compute_ct_dist(r1_ct_list[r1_ct_idx],
+            pairwise_r_ct_dists[r1_ct_idx, r2_ct_idx] = self._compute_ct_dist(r1_ct_list[r1_ct_idx],
                                                                                r2_ct_list[r2_ct_idx])
         # Continuously pair up cell types, merge them, add them to the new region, and delete them
         while np.prod(pairwise_r_ct_dists.shape) != 0:
@@ -186,9 +186,6 @@ class Agglomerate3D:
         return self.r_id_idx - 1
 
     def agglomerate(self, data: pd.DataFrame) -> pd.DataFrame:
-        ct_dists: PriorityQueue[Edge] = PriorityQueue()
-        r_dists: PriorityQueue[Edge] = PriorityQueue()
-
         ct_names = data.index.values
         ct_regions = np.vectorize(get_region)(ct_names)
         r_names = np.unique(ct_regions)
@@ -209,6 +206,9 @@ class Agglomerate3D:
         # repeat until we're left with one region and one cell type
         # not necessarily true evolutionarily, but same assumption as normal dendrogram
         while len(self.regions) > 1 or len(self.cell_types) > 1:
+            ct_dists: PriorityQueue[Edge] = PriorityQueue()
+            r_dists: PriorityQueue[Edge] = PriorityQueue()
+
             # Compute distances of all possible edges between cell types in the same region
             for region in self.regions.values():
                 for ct1, ct2 in combinations(list(region.cell_types.values()), 2):
