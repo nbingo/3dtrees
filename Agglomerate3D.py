@@ -9,6 +9,10 @@ import numpy as np
 import pandas as pd
 
 
+LINKAGE_CELL_OPTIONS = ['single', 'complete', 'average']
+LINKAGE_REGION_OPTIONS = ['single', 'complete', 'average']
+
+
 @dataclass
 class Node(ABC):
     id_num: int
@@ -79,10 +83,6 @@ class Edge:
 
     def __gt__(self, other):
         return self.dist > other.dist
-
-
-LINKAGE_CELL_OPTIONS = ['single', 'complete', 'average']
-LINKAGE_REGION_OPTIONS = ['single', 'complete', 'average']
 
 
 class Agglomerate3D:
