@@ -71,9 +71,8 @@ LINKAGE_REGION_OPTIONS = ['single', 'complete', 'average']
 
 
 class Agglomerate3D:
-    def __init__(self, cell_type_affinity: Callable, region_affinity: Callable, linkage_cell: str, linkage_region: str):
+    def __init__(self, cell_type_affinity: Callable, linkage_cell: str, linkage_region: str):
         self.cell_type_affinity = cell_type_affinity
-        self.region_affinity = region_affinity
         self.linkage_cell = linkage_cell
         self.linkage_region = linkage_region
         self.linkage_history: List[Dict[str, int]] = []
@@ -86,6 +85,10 @@ class Agglomerate3D:
         if linkage_region not in LINKAGE_REGION_OPTIONS:
             raise UserWarning(f'Incorrect argument passed in for region linkage. Must be one of '
                               f'{LINKAGE_REGION_OPTIONS}')
+
+    @property
+    def linkage_mat(self):
+        return pd.DataFrame(self.linkage_history)
 
     def _compute_ct_dist(self, ct1: CellType, ct2: CellType) -> np.float64:
         dists = np.zeros((ct1.num_original, ct2.num_original))
@@ -247,4 +250,4 @@ class Agglomerate3D:
                 r2 = r_edge.endpt2
                 self._merge_regions(r1, r2, r_edge.dist)
 
-        return pd.DataFrame(self.linkage_history)
+        return self.linkage_mat
