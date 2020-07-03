@@ -5,9 +5,9 @@ from scipy.stats import spearmanr
 if __name__ == '__main__':
     data = read_data()
 
-    def spearmanr_connectivity(x):
+    def spearmanr_connectivity(x, y):
         # data is assumed to be (n_variables, n_examples)
-        rho, _ = spearmanr(x, axis=1)
+        rho, _ = spearmanr(x, y, axis=1)
         return 1 - rho
 
     agglomerate = Agglomerate3D(
