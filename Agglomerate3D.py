@@ -11,10 +11,11 @@ LINKAGE_REGION_OPTIONS = ['single', 'complete', 'average', 'homolog_avg']
 
 
 class Agglomerate3D:
-    def __init__(self, cell_type_affinity: Callable, linkage_cell: str, linkage_region: str, verbose: bool = False):
+    def __init__(self, cell_type_affinity: Callable, linkage_cell: str, linkage_region: str, max_region_diff: int = 0, verbose: bool = False):
         self.cell_type_affinity = cell_type_affinity
         self.linkage_cell = linkage_cell
         self.linkage_region = linkage_region
+        self.max_region_diff = max_region_diff
         self.verbose = verbose
         self.linkage_history: List[Dict[str, int]] = []
         self.regions: Dict[int, Region] = {}
@@ -231,9 +232,8 @@ class Agglomerate3D:
             # compute distances between mergeable regions
             for r1, r2 in combinations(self.regions.values(), 2):
                 # condition for merging regions
-                # currently must have same number of cell types
-                # so that when regions are merged, each cell type is assumed to have an exact homolog
-                if len(r1.cell_types) != len(r2.cell_types):
+                # regions can only differ by self.max_region_diff number of cell types
+                if np.abs(r1.num_cell_types - r2.num_cell_types) > self.max_region_diff:
                     continue
 
                 dist = self._compute_region_dist(r1, r2)
