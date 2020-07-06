@@ -11,7 +11,8 @@ LINKAGE_REGION_OPTIONS = ['single', 'complete', 'average', 'homolog_avg']
 
 
 class Agglomerate3D:
-    def __init__(self, cell_type_affinity: Callable, linkage_cell: str, linkage_region: str, max_region_diff: int = 0, verbose: bool = False):
+    def __init__(self, cell_type_affinity: Callable, linkage_cell: str, linkage_region: str, max_region_diff: int = 0,
+                 verbose: bool = False):
         self.cell_type_affinity = cell_type_affinity
         self.linkage_cell = linkage_cell
         self.linkage_region = linkage_region
@@ -36,11 +37,13 @@ class Agglomerate3D:
 
     def _assert_integrity(self):
         # Make sure all cell types belong to their corresponding region
-        for ct in self.cell_types.values():
-            assert ct in self.regions[ct.region].cell_types.values(), 'Cell type not in indicated region.'
+        for ct_id in self.cell_types:
+            assert self.cell_types[ct_id].id_num == ct_id, 'Cell type dict key-value mismatch'
+            assert ct_id in self.regions[self.cell_types[ct_id].region].cell_types, 'Cell type not in indicated region.'
         for r in self.regions.values():
-            for ct in r.cell_types.values():
-                assert ct.id_num in self.cell_types, 'Region has cell type that does not exist recorded cell types.'
+            for ct_id in r.cell_types:
+                assert r.cell_types[ct_id].id_num == ct_id, 'Within region cell type dict key-value mismatch'
+                assert ct_id in self.cell_types, 'Region has cell type that does not exist recorded cell types.'
 
     def _compute_ct_dist(self, ct1: CellType, ct2: CellType) -> np.float64:
         dists = np.zeros((ct1.num_original, ct2.num_original))
@@ -87,7 +90,8 @@ class Agglomerate3D:
     def _merge_cell_types(self, ct1: CellType, ct2: CellType, ct_dist: float, region_id: int = None):
         # must be in same region if not being created into a new region
         if region_id is None:
-            assert ct1.region == ct2.region, 'Tried merging cell types from different regions without new target region.'
+            assert ct1.region == ct2.region, \
+                'Tried merging cell types from different regions without new target region.'
             region_id = ct1.region
 
         # Create new cell type and assign to region
@@ -146,8 +150,18 @@ class Agglomerate3D:
 
             # add to our new region
             self.regions[self.r_id_idx].cell_types[new_ct_id] = self.cell_types[new_ct_id]
+        # Should have at least one empty region
+        assert r1.num_cell_types == 0 or r2.num_cell_types == 0, 'Both regions non-empty after primary merging.'
+        # if there is a nonempty region, put the remainder of the cell types in the non-empty region into the new region
+        if r1.num_cell_types > 0 or r2.num_cell_types > 0:
+            r_leftover = r1 if r1.num_cell_types > 0 else r2
+            for ct in r_leftover.cell_types.values():
+                ct.region = self.r_id_idx
+                self.regions[self.r_id_idx].cell_types[ct.id_num] = ct
+            r_leftover.cell_types.clear()
+
         # make sure no cell types are leftover in the regions we're about to delete
-        assert len(r1.cell_types) == 0 and len(r2.cell_types) == 0, 'Tried deleting non-empty regions.'
+        assert r1.num_cell_types == 0 and r2.num_cell_types == 0, 'Tried deleting non-empty regions.'
         self.regions.pop(r1.id_num)
         self.regions.pop(r2.id_num)
 

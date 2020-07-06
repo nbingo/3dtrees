@@ -15,7 +15,7 @@ if __name__ == '__main__':
         cell_type_affinity=spearmanr_connectivity,
         linkage_cell='complete',
         linkage_region='homolog_avg',
-        max_region_diff=0,
+        max_region_diff=1,
         verbose=True
     )
 

@@ -39,6 +39,10 @@ class CellType(Node):
     def region(self):
         return self._region
 
+    @region.setter
+    def region(self, r: int):
+        self._region = r
+
     def __repr__(self):
         return f'{self.region}.{self.id_num}'
 
