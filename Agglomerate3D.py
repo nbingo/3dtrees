@@ -6,9 +6,8 @@ from data_types import *
 import numpy as np
 import pandas as pd
 
-
 LINKAGE_CELL_OPTIONS = ['single', 'complete', 'average']
-LINKAGE_REGION_OPTIONS = ['single', 'complete', 'average']
+LINKAGE_REGION_OPTIONS = ['single', 'complete', 'average', 'homolog_avg']
 
 
 class Agglomerate3D:
@@ -34,6 +33,14 @@ class Agglomerate3D:
     def linkage_mat(self):
         return pd.DataFrame(self.linkage_history)
 
+    def _assert_integrity(self):
+        # Make sure all cell types belong to their corresponding region
+        for ct in self.cell_types.values():
+            assert ct in self.regions[ct.region].cell_types.values(), 'Cell type not in indicated region.'
+        for r in self.regions.values():
+            for ct in r.cell_types.values():
+                assert ct.id_num in self.cell_types, 'Region has cell type that does not exist recorded cell types.'
+
     def _compute_ct_dist(self, ct1: CellType, ct2: CellType) -> np.float64:
         dists = np.zeros((ct1.num_original, ct2.num_original))
         # Compute distance matrix
@@ -54,13 +61,23 @@ class Agglomerate3D:
         ct_dists = np.zeros((len(r1.cell_types), len(r2.cell_types)))
         r1_ct_list = list(r1.cell_types.values())
         r2_ct_list = list(r2.cell_types.values())
-        for r1_idx, r2_idx in product(range(len(r1.cell_types)), range(len(r2.cell_types))):
+        for r1_idx, r2_idx in product(range(r1.num_cell_types), range(r2.num_cell_types)):
             ct_dists[r1_idx, r2_idx] = self._compute_ct_dist(r1_ct_list[r1_idx], r2_ct_list[r2_idx])
 
         if self.linkage_region == 'single':
             dist = ct_dists.min()
         elif self.linkage_region == 'complete':
             dist = ct_dists.max()
+        elif self.linkage_region == 'homolog_avg':
+            dists = []
+            for i in range(np.min(ct_dists.shape)):
+                # Add the distance between the two closest cell types (can consider as homologs)
+                dists.append(ct_dists.min())
+                # Delete these two homologs from the distance matrix
+                ct_min1_idx, ct_min2_idx = np.unravel_index(np.argmin(ct_dists), ct_dists.shape)
+                ct_dists = np.delete(ct_dists, ct_min1_idx, axis=0)
+                ct_dists = np.delete(ct_dists, ct_min2_idx, axis=1)
+            dist = np.mean(dists)
         else:  # default to 'average':
             dist = ct_dists.mean()
 
@@ -69,7 +86,7 @@ class Agglomerate3D:
     def _merge_cell_types(self, ct1: CellType, ct2: CellType, ct_dist: float, region_id: int = None):
         # must be in same region if not being created into a new region
         if region_id is None:
-            assert ct1.region == ct2.region
+            assert ct1.region == ct2.region, 'Tried merging cell types from different regions without new target region.'
             region_id = ct1.region
 
         # Create new cell type and assign to region
@@ -111,7 +128,7 @@ class Agglomerate3D:
         pairwise_r_ct_dists = np.zeros((len(r1.cell_types), len(r2.cell_types)))
         for r1_ct_idx, r2_ct_idx in product(range(len(r1_ct_list)), range(len(r2_ct_list))):
             pairwise_r_ct_dists[r1_ct_idx, r2_ct_idx] = self._compute_ct_dist(r1_ct_list[r1_ct_idx],
-                                                                               r2_ct_list[r2_ct_idx])
+                                                                              r2_ct_list[r2_ct_idx])
         # Continuously pair up cell types, merge them, add them to the new region, and delete them
         while np.prod(pairwise_r_ct_dists.shape) != 0:
             ct_merge1_idx, ct_merge2_idx = np.unravel_index(np.argmin(pairwise_r_ct_dists),
@@ -122,12 +139,14 @@ class Agglomerate3D:
 
             # remove from the distance matrix
             pairwise_r_ct_dists = np.delete(pairwise_r_ct_dists, ct_merge1_idx, axis=0)
+            r1_ct_list.pop(ct_merge1_idx)
             pairwise_r_ct_dists = np.delete(pairwise_r_ct_dists, ct_merge2_idx, axis=1)
+            r2_ct_list.pop(ct_merge2_idx)
 
             # add to our new region
             self.regions[self.r_id_idx].cell_types[new_ct_id] = self.cell_types[new_ct_id]
         # make sure no cell types are leftover in the regions we're about to delete
-        assert len(r1.cell_types) == 0 and len(r2.cell_types) == 0
+        assert len(r1.cell_types) == 0 and len(r2.cell_types) == 0, 'Tried deleting non-empty regions.'
         self.regions.pop(r1.id_num)
         self.regions.pop(r2.id_num)
 
@@ -143,17 +162,17 @@ class Agglomerate3D:
 
     def _record_link(self, n1: Node, n2: Node, new_node: Node, dist: float):
         # Must be recording the linkage of two things of the same type
-        assert type(n1) is type(n2)
+        assert type(n1) is type(n2), 'Tried recording linkage of a cell type with a region.'
 
         # record merger in linkage history
-        region_merger = (type(n1) is Region) or (n1.region != n2.region)
+        region_merger = isinstance(n1, Region) or (n1.region != n2.region)
         self.linkage_history.append({'Is region': isinstance(n1, Region),
                                      'ID1': n1.id_num,
                                      'ID2': n2.id_num,
                                      'new ID': new_node.id_num,
-                                     'In region': new_node.region,
                                      'Distance': dist,
-                                     'Num original': new_node.id_num,
+                                     'Num original': new_node.num_original,
+                                     'In region': new_node.region,
                                      'In reg merge': region_merger
                                      })
 
@@ -226,10 +245,10 @@ class Agglomerate3D:
             r_edge = r_dists.get() if not r_dists.empty() else None
 
             # both shouldn't be None
-            assert not (ct_edge is None and r_edge is None)
+            assert not (ct_edge is None and r_edge is None), 'No cell types or regions to merge.'
 
             # we're merging cell types, which gets a slight preference if equal
-            if ct_edge is not None and (ct_edge.dist <= r_edge.dist):
+            if ct_edge is not None and ((r_edge is None) or (ct_edge.dist <= r_edge.dist)):
                 ct1 = ct_edge.endpt1
                 ct2 = ct_edge.endpt2
 
@@ -242,5 +261,8 @@ class Agglomerate3D:
                 r1 = r_edge.endpt1
                 r2 = r_edge.endpt2
                 self._merge_regions(r1, r2, r_edge.dist)
+
+            if self.verbose:
+                self._assert_integrity()
 
         return self.linkage_mat

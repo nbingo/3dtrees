@@ -62,6 +62,10 @@ class Region(Node):
         return np.sum([ct.num_original for ct in self.cell_types.values()])
 
     @property
+    def num_cell_types(self):
+        return len(self.cell_types)
+
+    @property
     def region(self):
         return self.id_num
 
