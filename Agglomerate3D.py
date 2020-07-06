@@ -22,10 +22,15 @@ class Node(ABC):
     def num_original(self):
         pass
 
+    @property
+    @abstractmethod
+    def region(self):
+        pass
+
 
 @dataclass
 class CellType(Node):
-    region: int
+    _region: int
     _transcriptome: np.array
 
     @property
@@ -34,13 +39,13 @@ class CellType(Node):
             return self._transcriptome.reshape(1, -1)
         return self._transcriptome
 
-    # @transcriptome.setter
-    # def transcriptome(self, t: np.array):
-    #     self._transcriptome = t
-
     @property
     def num_original(self):
         return self.transcriptome.shape[0]
+
+    @property
+    def region(self):
+        return self._region
 
     def __repr__(self):
         return f'{self.region}.{self.id_num}'
@@ -63,6 +68,10 @@ class Region(Node):
     @property
     def num_original(self):
         return np.sum([ct.num_original for ct in self.cell_types.values()])
+
+    @property
+    def region(self):
+        return self.id_num
 
     def __repr__(self):
         return f'{self.id_num}{list(self.cell_types.values())}'
@@ -152,7 +161,7 @@ class Agglomerate3D:
                                                    np.row_stack((ct1.transcriptome, ct2.transcriptome)))
         self.regions[region_id].cell_types[self.ct_id_idx] = self.cell_types[self.ct_id_idx]
 
-        self._record_link(ct1, ct2, self.ct_id_idx, ct_dist)
+        self._record_link(ct1, ct2, self.cell_types[self.ct_id_idx], ct_dist)
 
         # remove the old ones
         self.cell_types.pop(ct1.id_num)
@@ -205,7 +214,7 @@ class Agglomerate3D:
         self.regions.pop(r1.id_num)
         self.regions.pop(r2.id_num)
 
-        self._record_link(r1, r2, self.r_id_idx, r_dist)
+        self._record_link(r1, r2, self.regions[self.r_id_idx], r_dist)
 
         if self.verbose:
             print(f'Merged regions {r1} and {r2} with distance {r_dist} to form '
@@ -215,21 +224,20 @@ class Agglomerate3D:
         self.r_id_idx += 1
         return self.r_id_idx - 1
 
-    def _record_link(self, n1: Node, n2: Node, new_id: int, dist: float):
+    def _record_link(self, n1: Node, n2: Node, new_node: Node, dist: float):
         # Must be recording the linkage of two things of the same type
         assert type(n1) is type(n2)
 
         # record merger in linkage history
-        if type(n1) is Region:
-            num_orig = self.regions[new_id].num_original
-        else:
-            num_orig = self.cell_types[new_id].num_original
+        region_merger = (type(n1) is Region) or (n1.region != n2.region)
         self.linkage_history.append({'Is region': isinstance(n1, Region),
                                      'ID1': n1.id_num,
                                      'ID2': n2.id_num,
-                                     'new ID': new_id,
+                                     'new ID': new_node.id_num,
+                                     'In region': new_node.region,
                                      'Distance': dist,
-                                     'Num original': num_orig
+                                     'Num original': new_node.id_num,
+                                     'In reg merge': region_merger
                                      })
 
     @property
@@ -248,6 +256,8 @@ class Agglomerate3D:
                     lm.loc[i, 'ID1'] = id_to_ct[lm.loc[i, 'ID1']]
                 if lm.loc[i, 'ID2'] in id_to_ct:
                     lm.loc[i, 'ID2'] = id_to_ct[lm.loc[i, 'ID2']]
+            if lm.loc[i, 'In region'] in id_to_r:
+                lm.loc[i, 'In region'] = id_to_r[lm.loc[i, 'In region']]
 
         return lm
 
