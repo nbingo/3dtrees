@@ -2,6 +2,7 @@ from Agglomerate3D import Agglomerate3D
 from data_utils import read_data
 from scipy.stats import spearmanr
 import pandas as pd
+import time
 
 if __name__ == '__main__':
     data = read_data()
@@ -20,6 +21,9 @@ if __name__ == '__main__':
         integrity_check=True
     )
 
+    start = time.process_time()
     agglomerate.agglomerate(data)
+    end = time.process_time()
     pd.options.display.width = 0
     print(agglomerate.linkage_mat_readable)
+    print(f'Total time elapsed: {(end - start) / 10}s')

@@ -135,6 +135,8 @@ class Agglomerate3D:
         r1_ct_list = list(r1.cell_types.values())
         r2_ct_list = list(r2.cell_types.values())
 
+        num_ct_diff = np.abs(r1.num_cell_types - r2.num_cell_types)
+
         if self.verbose:
             print(f'Merging regions {r1} and {r2} into new region {self.r_id_idx}\n{{')
 
@@ -176,7 +178,7 @@ class Agglomerate3D:
         self.regions.pop(r1.id_num)
         self.regions.pop(r2.id_num)
 
-        self._record_link(r1, r2, self.regions[self.r_id_idx], r_dist)
+        self._record_link(r1, r2, self.regions[self.r_id_idx], r_dist, num_ct_diff)
 
         if self.verbose:
             print(f'Merged regions {r1} and {r2} with distance {r_dist} to form '
@@ -186,7 +188,7 @@ class Agglomerate3D:
         self.r_id_idx += 1
         return self.r_id_idx - 1
 
-    def _record_link(self, n1: Node, n2: Node, new_node: Node, dist: float):
+    def _record_link(self, n1: Node, n2: Node, new_node: Node, dist: float, ct_num_diff: Optional[int] = None):
         # Must be recording the linkage of two things of the same type
         assert type(n1) is type(n2), 'Tried recording linkage of a cell type with a region.'
 
@@ -201,7 +203,8 @@ class Agglomerate3D:
                                      'Distance': dist,
                                      'Num original': new_node.num_original,
                                      'In region': new_node.region,
-                                     'In reg merge': region_merger
+                                     'In reg merge': region_merger,
+                                     'Cell type num diff': ct_num_diff
                                      })
 
     @property

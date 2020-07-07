@@ -38,4 +38,4 @@ def read_data(preprocess: bool = True):
 
 
 def get_region(ct_name: str):
-    return ct_name.split('.')[1]
+    return ct_name[0] + '_' + ct_name.split('.')[1]
