@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field
-from typing import Union, Dict
+from typing import Union, Dict, Optional
 from abc import ABC, abstractmethod
 import functools
 import numpy as np
@@ -49,7 +49,7 @@ class CellType(Node):
 
 @dataclass
 class Region(Node):
-    cell_types: Dict[int, CellType] = field(default_factory=dict)
+    cell_types: Optional[Dict[int, CellType]] = field(default_factory=dict)
 
     @property
     def transcriptomes(self) -> np.array:

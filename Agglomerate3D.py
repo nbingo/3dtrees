@@ -1,4 +1,4 @@
-from typing import List, Callable, Optional
+from typing import List, Callable
 from queue import PriorityQueue
 from data_utils import get_region
 from itertools import combinations, product
@@ -32,7 +32,7 @@ class Agglomerate3D:
         self.r_id_idx: int = 0
         self.ct_names: List[str] = []
         self.r_names: List[str] = []
-        self.pbar = None
+        self.pbar: tqdm = tqdm()
         if linkage_cell not in LINKAGE_CELL_OPTIONS:
             raise UserWarning(f'Incorrect argument passed in for cell linkage. Must be one of {LINKAGE_CELL_OPTIONS}')
         if linkage_region not in LINKAGE_REGION_OPTIONS:
@@ -53,6 +53,7 @@ class Agglomerate3D:
                 assert r.cell_types[ct_id].id_num == ct_id, 'Within region cell type dict key-value mismatch'
                 assert ct_id in self.cell_types, 'Region has cell type that does not exist recorded cell types.'
 
+    # noinspection PyArgumentList
     def _compute_ct_dist(self, ct1: CellType, ct2: CellType) -> np.float64:
         dists = np.zeros((ct1.num_original, ct2.num_original))
         # Compute distance matrix
@@ -69,6 +70,7 @@ class Agglomerate3D:
 
         return np.float64(dist)
 
+    # noinspection PyArgumentList
     def _compute_region_dist(self, r1: Region, r2: Region) -> np.float64:
         ct_dists = np.zeros((len(r1.cell_types), len(r2.cell_types)))
         r1_ct_list = list(r1.cell_types.values())
@@ -95,7 +97,7 @@ class Agglomerate3D:
 
         return dist
 
-    def _merge_cell_types(self, ct1: CellType, ct2: CellType, ct_dist: float, region_id: int = None):
+    def _merge_cell_types(self, ct1: CellType, ct2: CellType, ct_dist: float, region_id: Optional[int] = None):
         # must be in same region if not being created into a new region
         if region_id is None:
             assert ct1.region == ct2.region, \
@@ -147,6 +149,7 @@ class Agglomerate3D:
             ct_merge1_idx, ct_merge2_idx = np.unravel_index(np.argmin(pairwise_r_ct_dists),
                                                             pairwise_r_ct_dists.shape)
             # create new cell type, delete old ones and remove from their regions
+            # noinspection PyArgumentList
             new_ct_id = self._merge_cell_types(r1_ct_list[ct_merge1_idx], r2_ct_list[ct_merge2_idx],
                                                pairwise_r_ct_dists.min(), self.r_id_idx)
 
@@ -207,16 +210,11 @@ class Agglomerate3D:
         id_to_ct = {i: self.ct_names[i] for i in range(len(self.ct_names))}
         id_to_r = {i: self.r_names[i] for i in range(len(self.r_names))}
         for i in lm.index:
-            if lm.loc[i, 'Is region']:
-                if lm.loc[i, 'ID1'] in id_to_r:
-                    lm.loc[i, 'ID1'] = id_to_r[lm.loc[i, 'ID1']]
-                if lm.loc[i, 'ID2'] in id_to_r:
-                    lm.loc[i, 'ID2'] = id_to_r[lm.loc[i, 'ID2']]
-            else:
-                if lm.loc[i, 'ID1'] in id_to_ct:
-                    lm.loc[i, 'ID1'] = id_to_ct[lm.loc[i, 'ID1']]
-                if lm.loc[i, 'ID2'] in id_to_ct:
-                    lm.loc[i, 'ID2'] = id_to_ct[lm.loc[i, 'ID2']]
+            id_to_x = id_to_r if lm.loc[i, 'Is region'] else id_to_ct
+            if lm.loc[i, 'ID1'] in id_to_x:
+                lm.loc[i, 'ID1'] = id_to_x[lm.loc[i, 'ID1']]
+            if lm.loc[i, 'ID2'] in id_to_x:
+                lm.loc[i, 'ID2'] = id_to_x[lm.loc[i, 'ID2']]
             if lm.loc[i, 'In region'] in id_to_r:
                 lm.loc[i, 'In region'] = id_to_r[lm.loc[i, 'In region']]
 
@@ -240,7 +238,7 @@ class Agglomerate3D:
         self.ct_id_idx = len(self.ct_names)
         self.r_id_idx = len(self.r_names)
 
-        self.pbar = tqdm(total=len(self.ct_names) + len(self.r_names) - 2)
+        self.pbar.total = len(self.ct_names) + len(self.r_names) - 2
 
         # repeat until we're left with one region and one cell type
         # not necessarily true evolutionarily, but same assumption as normal dendrogram
@@ -255,7 +253,7 @@ class Agglomerate3D:
                     # add the edge with the desired distance to the priority queue
                     ct_dists.put(Edge(dist, ct1, ct2))
 
-            # compute distances between mergeable regions
+            # compute distances between merge-able regions
             for r1, r2 in combinations(self.regions.values(), 2):
                 # condition for merging regions
                 # regions can only differ by self.max_region_diff number of cell types
