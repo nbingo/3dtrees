@@ -16,7 +16,8 @@ if __name__ == '__main__':
         linkage_cell='complete',
         linkage_region='homolog_avg',
         max_region_diff=1,
-        verbose=True
+        verbose=False,
+        integrity_check=True
     )
 
     agglomerate.agglomerate(data)

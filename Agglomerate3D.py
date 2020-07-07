@@ -1,8 +1,9 @@
-from typing import List, Callable
+from typing import List, Callable, Optional
 from queue import PriorityQueue
 from data_utils import get_region
 from itertools import combinations, product
 from data_types import *
+from tqdm import tqdm
 import numpy as np
 import pandas as pd
 
@@ -11,13 +12,19 @@ LINKAGE_REGION_OPTIONS = ['single', 'complete', 'average', 'homolog_avg']
 
 
 class Agglomerate3D:
-    def __init__(self, cell_type_affinity: Callable, linkage_cell: str, linkage_region: str, max_region_diff: int = 0,
-                 verbose: bool = False):
+    def __init__(self,
+                 cell_type_affinity: Callable,
+                 linkage_cell: str,
+                 linkage_region: str,
+                 max_region_diff: Optional[int] = 0,
+                 verbose: Optional[bool] = False,
+                 integrity_check: Optional[bool] = True):
         self.cell_type_affinity = cell_type_affinity
         self.linkage_cell = linkage_cell
         self.linkage_region = linkage_region
         self.max_region_diff = max_region_diff
         self.verbose = verbose
+        self.integrity_check = integrity_check
         self.linkage_history: List[Dict[str, int]] = []
         self.regions: Dict[int, Region] = {}
         self.cell_types: Dict[int, CellType] = {}
@@ -25,6 +32,7 @@ class Agglomerate3D:
         self.r_id_idx: int = 0
         self.ct_names: List[str] = []
         self.r_names: List[str] = []
+        self.pbar = None
         if linkage_cell not in LINKAGE_CELL_OPTIONS:
             raise UserWarning(f'Incorrect argument passed in for cell linkage. Must be one of {LINKAGE_CELL_OPTIONS}')
         if linkage_region not in LINKAGE_REGION_OPTIONS:
@@ -179,6 +187,8 @@ class Agglomerate3D:
         # Must be recording the linkage of two things of the same type
         assert type(n1) is type(n2), 'Tried recording linkage of a cell type with a region.'
 
+        self.pbar.update(1)
+
         # record merger in linkage history
         region_merger = isinstance(n1, Region) or (n1.region != n2.region)
         self.linkage_history.append({'Is region': isinstance(n1, Region),
@@ -230,6 +240,8 @@ class Agglomerate3D:
         self.ct_id_idx = len(self.ct_names)
         self.r_id_idx = len(self.r_names)
 
+        self.pbar = tqdm(total=len(self.ct_names) + len(self.r_names) - 2)
+
         # repeat until we're left with one region and one cell type
         # not necessarily true evolutionarily, but same assumption as normal dendrogram
         while len(self.regions) > 1 or len(self.cell_types) > 1:
@@ -276,7 +288,7 @@ class Agglomerate3D:
                 r2 = r_edge.endpt2
                 self._merge_regions(r1, r2, r_edge.dist)
 
-            if self.verbose:
+            if self.integrity_check:
                 self._assert_integrity()
-
+        self.pbar.close()
         return self.linkage_mat
