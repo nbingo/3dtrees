@@ -28,8 +28,12 @@ def read_data(species: List[str], deg_species: Optional[List[str]] = None, prepr
         # Divide each row by mean, as in Tosches et al, rename columns,
         # and transpose so that column labels are genes and rows are cell types
         for i in range(len(species_data)):
+            # Filter for common DEGs
             species_data[i] = species_data[i].loc[species_data[i].index.isin(common_genes)]
-            species_data[i] = species_data[i].div(species_data[i].mean(axis=1).values, axis=0).add_prefix(f'{species[i][0]}_'.upper()).transpose()
+            # Divide each row by mean
+            species_data[i] = species_data[i].div(species_data[i].mean(axis=1).values, axis=0)
+            # Rename columns with species prefix and transpose so cell types are rows and genes are columns
+            species_data[i] = species_data[i].add_prefix(f'{species[i][0]}_'.upper()).transpose()
 
     # Concatenate all the data
     return pd.concat(species_data)
