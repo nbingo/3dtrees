@@ -36,7 +36,7 @@ def plot_dendrogram(model, **kwargs):
 
 
 if __name__ == '__main__':
-    data = read_data()
+    data = read_data(['mouse'])
 
 
     def spearmanr_connectivity(x):

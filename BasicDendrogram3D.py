@@ -5,7 +5,7 @@ import pandas as pd
 import time
 
 if __name__ == '__main__':
-    data = read_data()
+    data = read_data(['chicken'], ['chicken'])
 
     def spearmanr_connectivity(x, y):
         # data is assumed to be (n_variables, n_examples)
