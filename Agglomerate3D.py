@@ -9,6 +9,7 @@ import pandas as pd
 
 LINKAGE_CELL_OPTIONS = ['single', 'complete', 'average']
 LINKAGE_REGION_OPTIONS = ['single', 'complete', 'average', 'homolog_avg']
+TREE_SCORE_OPTIONS = ['ME, BME, MP']
 
 
 class Agglomerate3D:
@@ -16,12 +17,14 @@ class Agglomerate3D:
                  cell_type_affinity: Callable,
                  linkage_cell: str,
                  linkage_region: str,
+                 score_method: str,
                  max_region_diff: Optional[int] = 0,
                  verbose: Optional[bool] = False,
                  integrity_check: Optional[bool] = True):
         self.cell_type_affinity = cell_type_affinity
         self.linkage_cell = linkage_cell
         self.linkage_region = linkage_region
+        self.score_method = score_method
         self.max_region_diff = max_region_diff
         self.verbose = verbose
         self.integrity_check = integrity_check
@@ -43,6 +46,10 @@ class Agglomerate3D:
     def linkage_mat(self):
         return pd.DataFrame(self.linkage_history)
 
+    @property
+    def linkage_tree(self):
+        return Node.tree_from_link_mat(self.linkage_mat)
+
     def _assert_integrity(self):
         # Make sure all cell types belong to their corresponding region
         for ct_id in self.cell_types:
@@ -52,6 +59,9 @@ class Agglomerate3D:
             for ct_id in r.cell_types:
                 assert r.cell_types[ct_id].id_num == ct_id, 'Within region cell type dict key-value mismatch'
                 assert ct_id in self.cell_types, 'Region has cell type that does not exist recorded cell types.'
+
+    # def _trace_root_leaf_path(self, ct_id: int) -> Deque[str]:
+    #     assert not self.linkage_mat.empty, 'Tried tracing empty tree.'
 
     # noinspection PyArgumentList
     def _compute_ct_dist(self, ct1: CellType, ct2: CellType) -> np.float64:
@@ -188,7 +198,7 @@ class Agglomerate3D:
         self.r_id_idx += 1
         return self.r_id_idx - 1
 
-    def _record_link(self, n1: Node, n2: Node, new_node: Node, dist: float, ct_num_diff: Optional[int] = None):
+    def _record_link(self, n1: Mergeable, n2: Mergeable, new_node: Mergeable, dist: float, ct_num_diff: Optional[int] = None):
         # Must be recording the linkage of two things of the same type
         assert type(n1) is type(n2), 'Tried recording linkage of a cell type with a region.'
 

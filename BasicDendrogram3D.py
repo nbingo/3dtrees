@@ -16,6 +16,7 @@ if __name__ == '__main__':
         cell_type_affinity=spearmanr_connectivity,
         linkage_cell='complete',
         linkage_region='homolog_avg',
+        score_method='ME',
         max_region_diff=1,
         verbose=False,
         integrity_check=True
@@ -23,7 +24,8 @@ if __name__ == '__main__':
 
     start = time.process_time()
     agglomerate.agglomerate(data)
-    end = time.process_time()
+    end = time.perf_counter()
     pd.options.display.width = 0
     print(agglomerate.linkage_mat_readable)
+    print(agglomerate.linkage_tree)
     print(f'Total time elapsed: {(end - start) / 10}s')
