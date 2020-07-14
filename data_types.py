@@ -26,7 +26,7 @@ class Node:
         def recursive_tree_builder(id_num: int, parent):
             row = ct_link_mat.loc[ct_link_mat['new ID'] == id_num]
             if row.empty:
-                return None
+                return cls(id_num, parent)
             left_id = row.iloc[0]['ID1']
             right_id = row.iloc[0]['ID2']
             n = cls(id_num, parent)
