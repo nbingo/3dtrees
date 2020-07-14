@@ -29,8 +29,10 @@ class Agglomerate3D:
         self.verbose = verbose
         self.integrity_check = integrity_check
         self.linkage_history: List[Dict[str, int]] = []
+        self._linkage_tree = None
         self.regions: Dict[int, Region] = {}
         self.cell_types: Dict[int, CellType] = {}
+        self.orig_cell_types: Dict[int, CellType] = {}
         self.ct_id_idx: int = 0
         self.r_id_idx: int = 0
         self.ct_names: List[str] = []
@@ -48,7 +50,7 @@ class Agglomerate3D:
 
     @property
     def linkage_tree(self):
-        return Node.tree_from_link_mat(self.linkage_mat)
+        return self._linkage_tree if self._linkage_tree is not None else Node.tree_from_link_mat(self.linkage_mat)
 
     def _assert_integrity(self):
         # Make sure all cell types belong to their corresponding region
@@ -60,8 +62,59 @@ class Agglomerate3D:
                 assert r.cell_types[ct_id].id_num == ct_id, 'Within region cell type dict key-value mismatch'
                 assert ct_id in self.cell_types, 'Region has cell type that does not exist recorded cell types.'
 
-    # def _trace_root_leaf_path(self, ct_id: int) -> Deque[str]:
-    #     assert not self.linkage_mat.empty, 'Tried tracing empty tree.'
+    def _trace_all_root_leaf_paths(self) -> Dict[int, List[int]]:
+        assert not self.linkage_mat.empty, 'Tried tracing empty tree.'
+
+        paths: Dict[int, List[int]] = {}
+
+        def dfs(node: Node, path: List[int]):
+            # we are a leaf node
+            if node.right is None:
+                # by construction, either left and right are None, or neither is None
+                assert node.left is None
+                paths[node.id_num] = path
+            else:
+                # choose
+                path.append(node.right.id_num)
+                # explore
+                dfs(node.right, path)
+                # un-choose
+                path.pop()
+
+                # repeat for left
+                path.append(node.left.id_num)
+                dfs(node.left, path)
+                path.pop()
+
+        dfs(self.linkage_tree, [])
+        return paths
+
+    def _compute_orig_ct_path_dists(self):
+        num_ct = len(self.orig_cell_types)
+        dists = np.zeros((num_ct, num_ct))
+        paths = self._trace_all_root_leaf_paths()
+        for ct1_idx, ct2_idx in product(range(num_ct), range(num_ct)):
+            ct1_path = paths[ct1_idx][::-1]
+            ct2_path = paths[ct2_idx][::-1]
+            while (len(ct1_path) > 0) and (len(ct2_path) > 0) and (ct1_path[-1] == ct2_path[-1]):
+                ct1_path.pop()
+                ct2_path.pop()
+            dists[ct1_idx, ct2_idx] = len(ct1_path) + len(ct2_path)
+        return dists
+
+    def _compute_orig_ct_linkage_dists(self):
+        num_ct = len(self.orig_cell_types)
+        dists = np.zeros((num_ct, num_ct))
+        for ct1_idx, ct2_idx in product(range(num_ct), range(num_ct)):
+            dists[ct1_idx, ct2_idx] = self._compute_ct_dist(self.orig_cell_types[ct1_idx],
+                                                            self.orig_cell_types[ct2_idx])
+        return dists
+
+    def _compute_bme_score(self):
+        path_dists = self._compute_orig_ct_path_dists()
+        linkage_dists = self._compute_orig_ct_linkage_dists()
+        normalized_dists = linkage_dists / (2 ** path_dists)
+        return normalized_dists.sum() - np.trace(normalized_dists)
 
     # noinspection PyArgumentList
     def _compute_ct_dist(self, ct1: CellType, ct2: CellType) -> np.float64:
@@ -198,7 +251,8 @@ class Agglomerate3D:
         self.r_id_idx += 1
         return self.r_id_idx - 1
 
-    def _record_link(self, n1: Mergeable, n2: Mergeable, new_node: Mergeable, dist: float, ct_num_diff: Optional[int] = None):
+    def _record_link(self, n1: Mergeable, n2: Mergeable, new_node: Mergeable, dist: float,
+                     ct_num_diff: Optional[int] = None):
         # Must be recording the linkage of two things of the same type
         assert type(n1) is type(n2), 'Tried recording linkage of a cell type with a region.'
 
@@ -245,8 +299,9 @@ class Agglomerate3D:
 
         for c in range(len(self.ct_names)):
             r_id = region_to_id[ct_regions[c]]
-            self.cell_types[c] = CellType(c, r_id, data_plain[c])
-            self.regions[r_id].cell_types[c] = self.cell_types[c]
+            self.orig_cell_types[c] = CellType(c, r_id, data_plain[c])
+            self.regions[r_id].cell_types[c] = self.orig_cell_types[c]
+        self.cell_types = self.orig_cell_types.copy()
 
         self.ct_id_idx = len(self.ct_names)
         self.r_id_idx = len(self.r_names)

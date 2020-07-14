@@ -27,5 +27,4 @@ if __name__ == '__main__':
     end = time.perf_counter()
     pd.options.display.width = 0
     print(agglomerate.linkage_mat_readable)
-    print(agglomerate.linkage_tree)
     print(f'Total time elapsed: {(end - start) / 10}s')
