@@ -17,19 +17,16 @@ class Agglomerate3D:
                  cell_type_affinity: Callable,
                  linkage_cell: str,
                  linkage_region: str,
-                 score_method: str,
                  max_region_diff: Optional[int] = 0,
                  verbose: Optional[bool] = False,
                  integrity_check: Optional[bool] = True):
         self.cell_type_affinity = cell_type_affinity
         self.linkage_cell = linkage_cell
         self.linkage_region = linkage_region
-        self.score_method = score_method
         self.max_region_diff = max_region_diff
         self.verbose = verbose
         self.integrity_check = integrity_check
         self.linkage_history: List[Dict[str, int]] = []
-        self._linkage_tree = None
         self.regions: Dict[int, Region] = {}
         self.cell_types: Dict[int, CellType] = {}
         self.orig_cell_types: Dict[int, CellType] = {}
@@ -50,7 +47,7 @@ class Agglomerate3D:
 
     @property
     def linkage_tree(self):
-        return self._linkage_tree if self._linkage_tree is not None else Node.tree_from_link_mat(self.linkage_mat)
+        return Node.tree_from_link_mat(self.linkage_mat)
 
     def _assert_integrity(self):
         # Make sure all cell types belong to their corresponding region
@@ -110,11 +107,20 @@ class Agglomerate3D:
                                                             self.orig_cell_types[ct2_idx])
         return dists
 
-    def _compute_bme_score(self):
+    def compute_bme_score(self):
         path_dists = self._compute_orig_ct_path_dists()
         linkage_dists = self._compute_orig_ct_linkage_dists()
         normalized_dists = linkage_dists / (2 ** path_dists)
         return normalized_dists.sum() - np.trace(normalized_dists)
+
+    def compute_me_score(self):
+        # Get only the rows that make sense to sum
+        to_sum = self.linkage_mat.loc[self.linkage_mat['Is region'] == self.linkage_mat['In reg merge']]
+        return to_sum['Distance'].to_numpy().sum()
+
+    def compute_mp_score(self):
+        to_sum = self.linkage_mat.loc[self.linkage_mat['Is region'] == self.linkage_mat['In reg merge']]
+        return to_sum.shape[0]
 
     # noinspection PyArgumentList
     def _compute_ct_dist(self, ct1: CellType, ct2: CellType) -> np.float64:
