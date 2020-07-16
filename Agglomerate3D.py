@@ -69,7 +69,7 @@ class Agglomerate3D:
             if node.right is None:
                 # by construction, either left and right are None, or neither is None
                 assert node.left is None
-                paths[node.id_num] = path
+                paths[node.id_num] = path.copy()
             else:
                 # choose
                 path.append(node.right.id_num)
@@ -111,7 +111,7 @@ class Agglomerate3D:
         path_dists = self._compute_orig_ct_path_dists()
         linkage_dists = self._compute_orig_ct_linkage_dists()
         normalized_dists = linkage_dists / (2 ** path_dists)
-        return normalized_dists.sum() - np.trace(normalized_dists)
+        return normalized_dists.sum()
 
     def compute_me_score(self) -> float:
         # Get only the rows that make sense to sum
