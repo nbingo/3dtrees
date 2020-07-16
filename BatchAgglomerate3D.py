@@ -1,10 +1,11 @@
-from typing import Callable, Optional, List
+from typing import Callable, Optional, List, Tuple
 from Agglomerate3D import Agglomerate3D
 from itertools import product
 import multiprocessing as mp
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
+# Need this to have correct namespace during parallelization. Yet another reason why python is dumb
 from metric_utils import *
 
 TREE_SCORE_OPTIONS = ['ME', 'BME', 'MP']
@@ -37,7 +38,7 @@ class BatchAgglomerate3D:
 
     @staticmethod
     def _agglomerate_func(cta, lc, lr, mrd, ic, data):
-        agglomerate = Agglomerate3D(cta, lc, lr, mrd, verbose=True, pbar=False, integrity_check=ic)
+        agglomerate = Agglomerate3D(cta, lc, lr, mrd, verbose=False, pbar=False, integrity_check=ic)
         agglomerate.agglomerate(data)
         return agglomerate
 
@@ -57,7 +58,7 @@ class BatchAgglomerate3D:
         self.pool.join()
         self.pbar.close()
 
-    def get_best_agglomerator(self) -> Agglomerate3D:
+    def get_best_agglomerator(self) -> Tuple[Agglomerate3D, float]:
         def score_func(a: Agglomerate3D):
             if self.tree_rank == 'MP':
                 return a.compute_mp_score()
@@ -67,4 +68,4 @@ class BatchAgglomerate3D:
                 return a.compute_bme_score()
 
         scores = list(map(score_func, self.agglomerators))
-        return self.agglomerators[int(np.argmin(scores))]
+        return self.agglomerators[int(np.argmin(scores))], np.max(scores)
