@@ -9,7 +9,6 @@ import pandas as pd
 
 LINKAGE_CELL_OPTIONS = ['single', 'complete', 'average']
 LINKAGE_REGION_OPTIONS = ['single', 'complete', 'average', 'homolog_avg']
-TREE_SCORE_OPTIONS = ['ME, BME, MP']
 
 
 class Agglomerate3D:
@@ -19,6 +18,7 @@ class Agglomerate3D:
                  linkage_region: str,
                  max_region_diff: Optional[int] = 0,
                  verbose: Optional[bool] = False,
+                 pbar: Optional[bool] = False,
                  integrity_check: Optional[bool] = True):
         self.cell_type_affinity = cell_type_affinity
         self.linkage_cell = linkage_cell
@@ -34,7 +34,7 @@ class Agglomerate3D:
         self.r_id_idx: int = 0
         self.ct_names: List[str] = []
         self.r_names: List[str] = []
-        self.pbar: tqdm = tqdm()
+        self.pbar = tqdm() if pbar else None
         if linkage_cell not in LINKAGE_CELL_OPTIONS:
             raise UserWarning(f'Incorrect argument passed in for cell linkage. Must be one of {LINKAGE_CELL_OPTIONS}')
         if linkage_region not in LINKAGE_REGION_OPTIONS:
@@ -107,18 +107,18 @@ class Agglomerate3D:
                                                             self.orig_cell_types[ct2_idx])
         return dists
 
-    def compute_bme_score(self):
+    def compute_bme_score(self) -> float:
         path_dists = self._compute_orig_ct_path_dists()
         linkage_dists = self._compute_orig_ct_linkage_dists()
         normalized_dists = linkage_dists / (2 ** path_dists)
         return normalized_dists.sum() - np.trace(normalized_dists)
 
-    def compute_me_score(self):
+    def compute_me_score(self) -> float:
         # Get only the rows that make sense to sum
         to_sum = self.linkage_mat.loc[self.linkage_mat['Is region'] == self.linkage_mat['In reg merge']]
         return to_sum['Distance'].to_numpy().sum()
 
-    def compute_mp_score(self):
+    def compute_mp_score(self) -> float:
         to_sum = self.linkage_mat.loc[self.linkage_mat['Is region'] == self.linkage_mat['In reg merge']]
         return to_sum.shape[0]
 
@@ -262,7 +262,8 @@ class Agglomerate3D:
         # Must be recording the linkage of two things of the same type
         assert type(n1) is type(n2), 'Tried recording linkage of a cell type with a region.'
 
-        self.pbar.update(1)
+        if self.pbar is not None:
+            self.pbar.update(1)
 
         # record merger in linkage history
         region_merger = isinstance(n1, Region) or (n1.region != n2.region)
@@ -312,7 +313,8 @@ class Agglomerate3D:
         self.ct_id_idx = len(self.ct_names)
         self.r_id_idx = len(self.r_names)
 
-        self.pbar.total = len(self.ct_names) + len(self.r_names) - 2
+        if self.pbar is not None:
+            self.pbar.total = len(self.ct_names) + len(self.r_names) - 2
 
         # repeat until we're left with one region and one cell type
         # not necessarily true evolutionarily, but same assumption as normal dendrogram
@@ -362,5 +364,6 @@ class Agglomerate3D:
 
             if self.integrity_check:
                 self._assert_integrity()
-        self.pbar.close()
+        if self.pbar is not None:
+            self.pbar.close()
         return self.linkage_mat
