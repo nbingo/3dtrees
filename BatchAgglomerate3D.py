@@ -5,8 +5,9 @@ import multiprocessing as mp
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
+from metric_utils import *
 
-TREE_SCORE_OPTIONS = ['ME, BME, MP']
+TREE_SCORE_OPTIONS = ['ME', 'BME', 'MP']
 
 
 class BatchAgglomerate3D:
@@ -14,7 +15,7 @@ class BatchAgglomerate3D:
                  cell_type_affinity: List[Callable],
                  linkage_cell: List[str],
                  linkage_region: List[str],
-                 tree_rank: List[str],
+                 tree_rank: str,
                  max_region_diff: Optional[List[int]] = None,
                  verbose: Optional[bool] = False,
                  integrity_check: Optional[bool] = True):
@@ -36,7 +37,7 @@ class BatchAgglomerate3D:
 
     @staticmethod
     def _agglomerate_func(cta, lc, lr, mrd, ic, data):
-        agglomerate = Agglomerate3D(cta, lc, lr, mrd, verbose=False, pbar=False, integrity_check=ic)
+        agglomerate = Agglomerate3D(cta, lc, lr, mrd, verbose=True, pbar=False, integrity_check=ic)
         agglomerate.agglomerate(data)
         return agglomerate
 
@@ -45,16 +46,18 @@ class BatchAgglomerate3D:
         self.pbar.update(1)
 
     def agglomerate(self, data: pd.DataFrame):
-        for cta, lc, lr, mrd, ic \
+        for cta, lc, lr, mrd \
                 in product(self.cell_type_affinity, self.linkage_cell, self.linkage_region, self.max_region_diff):
+            if self.verbose:
+                print(f'Starting agglomeration with {cta, lc, lr, mrd, self.integrity_check}')
             self.pool.apply_async(self._agglomerate_func,
-                                  args=(cta, lc, lr, mrd, ic, data),
+                                  args=(cta, lc, lr, mrd, self.integrity_check, data),
                                   callback=self._collect_agglomerators)
         self.pool.close()
         self.pool.join()
         self.pbar.close()
 
-    def get_best_agglomerator(self):
+    def get_best_agglomerator(self) -> Agglomerate3D:
         def score_func(a: Agglomerate3D):
             if self.tree_rank == 'MP':
                 return a.compute_mp_score()
