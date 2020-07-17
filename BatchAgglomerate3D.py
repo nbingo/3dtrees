@@ -79,11 +79,15 @@ class BatchAgglomerate3D:
         self.pbar = tqdm(total=len(self.agglomerators))
 
         pool = mp.Pool(mp.cpu_count())
-
-        results = pool.map_async(self._score_func, self.agglomerators, callback=self._collect_scores).get()
-        print(results)
+        # pool = mp.Pool(1)
+        results = pool.map_async(
+            self._score_func,
+            self.agglomerators,
+            # callback=self._collect_scores
+        ).get()
         pool.close()
         pool.join()
+        np.apply_along_axis(func1d=self._collect_scores, axis=1, arr=results)
         self.pbar.close()
 
         best_agglomerators: Dict[str, Tuple[float, Agglomerate3D]] = {
