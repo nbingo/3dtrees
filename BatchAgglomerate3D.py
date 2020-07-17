@@ -1,4 +1,4 @@
-from typing import Callable, Optional, List, Tuple, Iterable
+from typing import Callable, Optional, List, Dict, Iterable, Tuple
 from Agglomerate3D import Agglomerate3D
 from itertools import product
 import multiprocessing as mp
@@ -16,7 +16,6 @@ class BatchAgglomerate3D:
                  cell_type_affinity: List[Callable],
                  linkage_cell: List[str],
                  linkage_region: List[str],
-                 tree_rank: str,
                  max_region_diff: Optional[List[int]] = None,
                  region_dist_scale: Optional[Iterable[float]] = None,
                  verbose: Optional[bool] = False,
@@ -29,15 +28,12 @@ class BatchAgglomerate3D:
         self.cell_type_affinity = cell_type_affinity
         self.linkage_cell = linkage_cell
         self.linkage_region = linkage_region
-        self.tree_rank = tree_rank
-        if tree_rank not in TREE_SCORE_OPTIONS:
-            raise UserWarning(f'Tree scoring options must be one of: {TREE_SCORE_OPTIONS}')
         self.max_region_diff = max_region_diff
         self.region_dist_scale = region_dist_scale
         self.verbose = verbose
         self.integrity_check = integrity_check
-        self.pool = mp.Pool(mp.cpu_count())
         self.agglomerators: List[Agglomerate3D] = []
+        self.tree_scores: Dict[str, List[float]] = {metric: [] for metric in TREE_SCORE_OPTIONS}
         self.pbar = \
             tqdm(total=np.product(list(map(len, [
                 cell_type_affinity, linkage_cell, linkage_region, max_region_diff, region_dist_scale
@@ -54,6 +50,7 @@ class BatchAgglomerate3D:
         self.pbar.update(1)
 
     def agglomerate(self, data: pd.DataFrame):
+        pool = mp.Pool(mp.cpu_count())
         for cta, lc, lr, mrd, rds in product(self.cell_type_affinity,
                                              self.linkage_cell,
                                              self.linkage_region,
@@ -61,21 +58,37 @@ class BatchAgglomerate3D:
                                              self.region_dist_scale):
             if self.verbose:
                 print(f'Starting agglomeration with {cta, lc, lr, mrd, rds, self.integrity_check}')
-            self.pool.apply_async(self._agglomerate_func,
-                                  args=(cta, lc, lr, mrd, rds, self.integrity_check, data),
-                                  callback=self._collect_agglomerators)
-        self.pool.close()
-        self.pool.join()
+            pool.apply_async(self._agglomerate_func,
+                             args=(cta, lc, lr, mrd, rds, self.integrity_check, data),
+                             callback=self._collect_agglomerators)
+        pool.close()
+        pool.join()
         self.pbar.close()
 
-    def get_best_agglomerator(self) -> Tuple[Agglomerate3D, float]:
-        def score_func(a: Agglomerate3D):
-            if self.tree_rank == 'MP':
-                return a.compute_mp_score()
-            elif self.tree_rank == 'ME':
-                return a.compute_me_score()
-            else:
-                return a.compute_bme_score()
+    def _collect_scores(self, scores: List[float]):
+        self.tree_scores['MP'].append(scores[0])
+        self.tree_scores['ME'].append(scores[1])
+        self.tree_scores['BME'].append(scores[2])
+        self.pbar.update(1)
 
-        scores = [score_func(a) for a in tqdm(self.agglomerators)]
-        return self.agglomerators[int(np.argmin(scores))], np.max(scores)
+    @staticmethod
+    def _score_func(a: Agglomerate3D) -> List[float]:
+        return [a.compute_mp_score(), a.compute_me_score(), a.compute_bme_score()]
+
+    def get_best_agglomerators(self) -> Dict[str, Tuple[float, Agglomerate3D]]:
+        self.pbar = tqdm(total=len(self.agglomerators))
+
+        pool = mp.Pool(mp.cpu_count())
+
+        results = pool.map_async(self._score_func, self.agglomerators, callback=self._collect_scores).get()
+        print(results)
+        pool.close()
+        pool.join()
+        self.pbar.close()
+
+        best_agglomerators: Dict[str, Tuple[float, Agglomerate3D]] = {
+            metric: (np.min(self.tree_scores[metric]), self.agglomerators[int(np.argmin(self.tree_scores[metric]))])
+            for metric in TREE_SCORE_OPTIONS
+        }
+
+        return best_agglomerators
