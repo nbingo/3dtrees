@@ -166,7 +166,7 @@ class Agglomerate3D:
         else:  # default to 'average':
             dist = ct_dists.mean()
 
-        return dist * self.region_dist_scale
+        return dist
 
     def _merge_cell_types(self, ct1: CellType, ct2: CellType, ct_dist: float, region_id: Optional[int] = None):
         # must be in same region if not being created into a new region
@@ -350,7 +350,7 @@ class Agglomerate3D:
             assert not (ct_edge is None and r_edge is None), 'No cell types or regions to merge.'
 
             # we're merging cell types, which gets a slight preference if equal
-            if ct_edge is not None and ((r_edge is None) or (ct_edge.dist <= r_edge.dist)):
+            if ct_edge is not None and ((r_edge is None) or (ct_edge.dist <= r_edge.dist * self.region_dist_scale)):
                 ct1 = ct_edge.endpt1
                 ct2 = ct_edge.endpt2
 
