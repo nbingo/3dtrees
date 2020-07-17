@@ -17,6 +17,7 @@ if __name__ == '__main__':
         linkage_cell='complete',
         linkage_region='homolog_avg',
         max_region_diff=1,
+        region_dist_scale=1,
         verbose=False,
         pbar=True,
         integrity_check=True

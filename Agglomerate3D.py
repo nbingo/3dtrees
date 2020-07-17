@@ -17,6 +17,7 @@ class Agglomerate3D:
                  linkage_cell: str,
                  linkage_region: str,
                  max_region_diff: Optional[int] = 0,
+                 region_dist_scale: Optional[float] = 1,
                  verbose: Optional[bool] = False,
                  pbar: Optional[bool] = False,
                  integrity_check: Optional[bool] = True):
@@ -24,6 +25,7 @@ class Agglomerate3D:
         self.linkage_cell = linkage_cell
         self.linkage_region = linkage_region
         self.max_region_diff = max_region_diff
+        self.region_dist_scale = region_dist_scale
         self.verbose = verbose
         self.integrity_check = integrity_check
         self.linkage_history: List[Dict[str, int]] = []
@@ -164,7 +166,7 @@ class Agglomerate3D:
         else:  # default to 'average':
             dist = ct_dists.mean()
 
-        return dist
+        return dist * self.region_dist_scale
 
     def _merge_cell_types(self, ct1: CellType, ct2: CellType, ct_dist: float, region_id: Optional[int] = None):
         # must be in same region if not being created into a new region
