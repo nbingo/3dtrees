@@ -43,6 +43,13 @@ class Agglomerate3D:
             raise UserWarning(f'Incorrect argument passed in for region linkage. Must be one of '
                               f'{LINKAGE_REGION_OPTIONS}')
 
+    def __repr__(self):
+        return f'Agglomerate3D<cell_type_affinity={self.cell_type_affinity}, ' \
+               f'linkage_cell={self.linkage_cell}, ' \
+               f'linkage_region={self.linkage_region}, ' \
+               f'max_region_diff={self.max_region_diff}, ' \
+               f'region_dist_scale={self.region_dist_scale}>'
+
     @property
     def linkage_mat(self):
         return pd.DataFrame(self.linkage_history)

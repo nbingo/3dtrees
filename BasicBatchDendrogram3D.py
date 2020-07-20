@@ -8,10 +8,10 @@ if __name__ == '__main__':
     data = read_data(['mouse'])
     agglomerate = BatchAgglomerate3D(
         cell_type_affinity=[spearmanr_connectivity],
-        linkage_cell=['complete', 'average'],
+        linkage_cell=['complete'],
         linkage_region=['homolog_avg'],
         max_region_diff=[0, 1],
-        region_dist_scale=np.arange(0.8, 1, 0.01),
+        region_dist_scale=np.arange(0.7, 1, 0.001),
         verbose=False
     )
 
