@@ -87,12 +87,11 @@ class BatchAgglomerate3D:
         self.pbar = tqdm(total=len(self.agglomerators))
 
         pool = mp.Pool(mp.cpu_count())
-        results = []
         for a in self.agglomerators:
-            results.append(pool.apply_async(func=self._score_func,
-                                            args=(a,),
-                                            callback=self._collect_scores
-                                            ))
+            pool.apply_async(func=self._score_func,
+                             args=(a,),
+                             callback=self._collect_scores
+                             )
         pool.close()
         pool.join()
         self.pbar.close()
