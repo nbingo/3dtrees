@@ -11,7 +11,7 @@ if __name__ == '__main__':
         linkage_cell=['complete'],
         linkage_region=['homolog_avg'],
         max_region_diff=[0, 1],
-        region_dist_scale=np.arange(0.7, 1, 0.001),
+        region_dist_scale=np.arange(0.7, 1, 0.01),
         verbose=False
     )
 
