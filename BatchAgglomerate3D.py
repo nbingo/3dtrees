@@ -5,8 +5,6 @@ import multiprocessing as mp
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
-# Need this to have correct namespace during parallelization. Yet another reason why python is dumb
-from metric_utils import *
 
 TREE_SCORE_OPTIONS = ['ME', 'BME', 'MP']
 
@@ -83,19 +81,20 @@ class BatchAgglomerate3D:
                [a.compute_tree_score(m) for m in TREE_SCORE_OPTIONS]
 
     def get_all_scores(self) -> pd.DataFrame:
-        self.pbar = tqdm(total=len(self.agglomerators))
+        self._compute_tree_scores(func=self._augmented_score_func, callback=self._collect_augmented_scores)
+        return pd.DataFrame(self.augmented_tree_scores)
 
+    def _compute_tree_scores(self, func: Callable, callback: Callable):
+        self.pbar = tqdm(total=len(self.agglomerators))
         pool = mp.Pool(mp.cpu_count())
         for a in self.agglomerators:
-            pool.apply_async(func=self._augmented_score_func,
+            pool.apply_async(func=func,
                              args=(a,),
-                             callback=self._collect_augmented_scores
+                             callback=callback
                              )
         pool.close()
         pool.join()
         self.pbar.close()
-
-        return pd.DataFrame(self.augmented_tree_scores)
 
     def _collect_basic_scores(self, scores: List[float]):
         for metric, score in zip(TREE_SCORE_OPTIONS, scores):
@@ -107,17 +106,7 @@ class BatchAgglomerate3D:
         return [a.compute_tree_score(m) for m in TREE_SCORE_OPTIONS]
 
     def get_best_agglomerators(self) -> Dict[str, Tuple[float, Agglomerate3D]]:
-        self.pbar = tqdm(total=len(self.agglomerators))
-
-        pool = mp.Pool(mp.cpu_count())
-        for a in self.agglomerators:
-            pool.apply_async(func=self._basic_score_func,
-                             args=(a,),
-                             callback=self._collect_basic_scores
-                             )
-        pool.close()
-        pool.join()
-        self.pbar.close()
+        self._compute_tree_scores(func=self._basic_score_func, callback=self._collect_basic_scores)
 
         best_agglomerators: Dict[str, Tuple[float, Agglomerate3D]] = {
             metric: (np.min(self.tree_scores[metric]), self.agglomerators[int(np.argmin(self.tree_scores[metric]))])
