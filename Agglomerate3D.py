@@ -116,20 +116,28 @@ class Agglomerate3D:
                                                             self.orig_cell_types[ct2_idx])
         return dists
 
-    def compute_bme_score(self) -> float:
+    def _compute_bme_score(self) -> float:
         path_dists = self._compute_orig_ct_path_dists()
         linkage_dists = self._compute_orig_ct_linkage_dists()
         normalized_dists = linkage_dists / (2 ** path_dists)
         return normalized_dists.sum()
 
-    def compute_me_score(self) -> float:
+    def _compute_me_score(self) -> float:
         # Get only the rows that make sense to sum
         to_sum = self.linkage_mat.loc[self.linkage_mat['Is region'] == self.linkage_mat['In reg merge']]
         return to_sum['Distance'].to_numpy().sum()
 
-    def compute_mp_score(self) -> float:
+    def _compute_mp_score(self) -> float:
         to_sum = self.linkage_mat.loc[self.linkage_mat['Is region'] == self.linkage_mat['In reg merge']]
         return to_sum.shape[0]
+
+    def compute_tree_score(self, metric: str):
+        if metric == 'ME':
+            return self._compute_me_score()
+        elif metric == 'MP':
+            return self._compute_mp_score()
+        else:
+            return self._compute_bme_score()
 
     # noinspection PyArgumentList
     def _compute_ct_dist(self, ct1: CellType, ct2: CellType) -> np.float64:

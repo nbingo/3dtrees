@@ -32,16 +32,13 @@ class BatchAgglomerate3D:
         self.region_dist_scale = region_dist_scale
         self.verbose = verbose
         self.integrity_check = integrity_check
-        self.manager = mp.Manager()
-        self.agglomerators: List[Agglomerate3D] = self.manager.list()
-        self.agglomerators_lock = self.manager.Lock()
-        self.tree_scores: Dict[str, List[float]] = self.manager.dict({metric: self.manager.list() for metric in TREE_SCORE_OPTIONS})
-        self.tree_scores_lock = self.manager.Lock()
+        self.agglomerators: List[Agglomerate3D] = []
+        self.augmented_tree_scores: List[Dict[str, float]] = []
+        self.tree_scores: Dict[str, List[float]] = {metric: [] for metric in TREE_SCORE_OPTIONS}
         self.pbar = \
             tqdm(total=np.product(list(map(len, [
                 cell_type_affinity, linkage_cell, linkage_region, max_region_diff, region_dist_scale
             ]))))
-        self.pbar_lock = self.manager.Lock()
 
     @staticmethod
     def _agglomerate_func(cta, lc, lr, mrd, rp, ic, data):
@@ -50,10 +47,8 @@ class BatchAgglomerate3D:
         return agglomerate
 
     def _collect_agglomerators(self, result):
-        with self.agglomerators_lock:
-            self.agglomerators.append(result)
-        with self.pbar_lock:
-            self.pbar.update(1)
+        self.agglomerators.append(result)
+        self.pbar.update(1)
 
     def agglomerate(self, data: pd.DataFrame):
         pool = mp.Pool(mp.cpu_count())
@@ -71,26 +66,54 @@ class BatchAgglomerate3D:
         pool.join()
         self.pbar.close()
 
-    def _collect_scores(self, scores: List[float]):
-        with self.tree_scores_lock:
-            self.tree_scores['MP'].append(scores[0])
-            self.tree_scores['ME'].append(scores[1])
-            self.tree_scores['BME'].append(scores[2])
-        with self.pbar_lock:
-            self.pbar.update(1)
+    def _collect_augmented_scores(self, result):
+        lc, lr, mrd, rds, scores = result
+        for metric, score in zip(TREE_SCORE_OPTIONS, scores):
+            self.augmented_tree_scores.append(
+                {'linkage_cell': lc, 'linkage_region': lr, 'max_region_diff': mrd, 'region_dist_scale': rds,
+                 'score metric': metric, 'score': score})
+        self.pbar.update(1)
 
     @staticmethod
-    def _score_func(a: Agglomerate3D) -> List[float]:
-        return [a.compute_mp_score(), a.compute_me_score(), a.compute_bme_score()]
+    def _augmented_score_func(a: Agglomerate3D) -> Tuple[str, str, int, float, List[float]]:
+        return a.linkage_cell, \
+               a.linkage_region, \
+               a.max_region_diff, \
+               a.region_dist_scale, \
+               [a.compute_tree_score(m) for m in TREE_SCORE_OPTIONS]
+
+    def get_all_scores(self) -> pd.DataFrame:
+        self.pbar = tqdm(total=len(self.agglomerators))
+
+        pool = mp.Pool(mp.cpu_count())
+        for a in self.agglomerators:
+            pool.apply_async(func=self._augmented_score_func,
+                             args=(a,),
+                             callback=self._collect_augmented_scores
+                             )
+        pool.close()
+        pool.join()
+        self.pbar.close()
+
+        return pd.DataFrame(self.augmented_tree_scores)
+
+    def _collect_basic_scores(self, scores: List[float]):
+        for metric, score in zip(TREE_SCORE_OPTIONS, scores):
+            self.tree_scores[metric].append(score)
+        self.pbar.update(1)
+
+    @staticmethod
+    def _basic_score_func(a: Agglomerate3D) -> List[float]:
+        return [a.compute_tree_score(m) for m in TREE_SCORE_OPTIONS]
 
     def get_best_agglomerators(self) -> Dict[str, Tuple[float, Agglomerate3D]]:
         self.pbar = tqdm(total=len(self.agglomerators))
 
         pool = mp.Pool(mp.cpu_count())
         for a in self.agglomerators:
-            pool.apply_async(func=self._score_func,
+            pool.apply_async(func=self._basic_score_func,
                              args=(a,),
-                             callback=self._collect_scores
+                             callback=self._collect_basic_scores
                              )
         pool.close()
         pool.join()
