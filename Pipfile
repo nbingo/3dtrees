@@ -12,6 +12,7 @@ scipy = "*"
 sklearn = "*"
 pandas = "*"
 tqdm = "*"
+seaborn = "*"
 
 [requires]
 python_version = "3.7"
