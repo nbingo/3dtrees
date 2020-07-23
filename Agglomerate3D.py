@@ -9,6 +9,7 @@ import pandas as pd
 
 LINKAGE_CELL_OPTIONS = ['single', 'complete', 'average']
 LINKAGE_REGION_OPTIONS = ['single', 'complete', 'average', 'homolog_avg']
+TREE_SCORE_OPTIONS = ['ME', 'BME', 'MP']
 
 
 class Agglomerate3D:
@@ -132,11 +133,13 @@ class Agglomerate3D:
         return to_sum.shape[0]
 
     def compute_tree_score(self, metric: str):
+        if metric not in TREE_SCORE_OPTIONS:
+            raise ValueError(f'metric must be one of: {TREE_SCORE_OPTIONS}.')
         if metric == 'ME':
             return self._compute_me_score()
         elif metric == 'MP':
             return self._compute_mp_score()
-        else:
+        elif metric == 'BME':
             return self._compute_bme_score()
 
     # noinspection PyArgumentList

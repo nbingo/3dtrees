@@ -1,12 +1,10 @@
 from typing import Callable, Optional, List, Dict, Iterable, Tuple
-from Agglomerate3D import Agglomerate3D
+from Agglomerate3D import Agglomerate3D, TREE_SCORE_OPTIONS
 from itertools import product
 import multiprocessing as mp
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
-
-TREE_SCORE_OPTIONS = ['ME', 'BME', 'MP']
 
 
 class BatchAgglomerate3D:
