@@ -6,6 +6,9 @@ from data_types import *
 from tqdm import tqdm
 import numpy as np
 import pandas as pd
+from mpl_toolkits.mplot3d.art3d import Line3DCollection
+from mpl_toolkits.mplot3d import Axes3D
+import matplotlib.pyplot as plt
 
 LINKAGE_CELL_OPTIONS = ['single', 'complete', 'average']
 LINKAGE_REGION_OPTIONS = ['single', 'complete', 'average', 'homolog_avg']
@@ -30,6 +33,7 @@ class Agglomerate3D:
         self.verbose = verbose
         self.integrity_check = integrity_check
         self.linkage_history: List[Dict[str, int]] = []
+        self._linkage_mat: pd.DataFrame = pd.DataFrame()
         self.regions: Dict[int, Region] = {}
         self.cell_types: Dict[int, CellType] = {}
         self.orig_cell_types: Dict[int, CellType] = {}
@@ -52,12 +56,124 @@ class Agglomerate3D:
                f'region_dist_scale={self.region_dist_scale}>'
 
     @property
-    def linkage_mat(self):
-        return pd.DataFrame(self.linkage_history)
+    def linkage_mat(self) -> pd.DataFrame:
+        if self._linkage_mat.empty:
+            return pd.DataFrame(self.linkage_history)
+        return self._linkage_mat
 
     @property
-    def linkage_tree(self):
+    def linkage_tree(self) -> Node:
         return Node.tree_from_link_mat(self.linkage_mat)
+
+    def view_tree3d(self):
+        lm = self.linkage_mat
+        segments = []
+        top_level = len(lm.index) - 1
+        # Create root pos z-pos as max of sum of region and ct distances
+
+        def find_ct_merge_index(ct_id: int) -> int:
+            no_reg = lm[~lm['Is region']]
+            return no_reg[(no_reg['ID1'] == ct_id) | (no_reg['ID2'] == ct_id)].index[0]
+
+        def find_ct_region(ct_id: int) -> int:
+            no_reg = lm[~lm['Is region']]
+            ct_row = no_reg[no_reg['New ID'] == ct_id]
+            # one of the original cell types
+            if ct_row.empty:
+                return self.orig_cell_types[ct_id].region
+            # not one of the original ones, so have to check which region it's in
+            return ct_row['In region'].iloc[0]
+
+        def is_original_ct(ct_id: int) -> bool:
+            no_reg = lm[~lm['Is region']]
+            return no_reg[no_reg['New ID'] == ct_id].empty
+
+        def segment_builder(level: int, index: int, root_pos: List[int]):
+            # focus on cell types and pretend that each call is really only on a cell type.
+            # Keep scanning up the list and see if the next thing that happens to this cell type
+            # is a cell type split or region split
+            # if cell type split, then draw on x-axis and switch focus of two the two daughter cell types
+            # if region split, then draw on y-axis and switch focus to the two cell types that got merged in the region merge
+
+            offset = 2 ** (level - 1)  # subtract 1 to divide by 2 since it's only half the line
+
+            # Should only happen if our tree starts with a region merger, which must consist of two cell types
+            if lm.loc[index, 'Is region']:
+                segment_builder(level, index - 1, root_pos)
+
+            # Build across y-axis if in region merger
+            elif lm.loc[index, 'In reg merge']:
+                # horizontal y-axis bar
+                h_start = root_pos.copy()
+                h_start[1] -= offset
+                h_end = root_pos.copy()
+                h_end[1] += offset
+                segments.append([h_start, h_end])
+
+                # Find the region we're merging in
+                region = lm.loc[index, 'In region']
+                region_mat = lm[lm['In region'] == region]
+                dist = region_mat[region_mat['Is region']]['Distance'].iloc[0]
+
+                # vertical z-axis bars
+                v_left_end = h_start.copy()
+                v_left_end[2] -= dist
+                v_right_end = h_end.copy()
+                v_right_end[2] -= dist
+                segments.append([h_start, v_left_end])
+                segments.append([h_end, v_right_end])
+
+                # figure out where to recurse on
+                ct1_id, ct2_id = lm.loc[index, ['ID1', 'ID2']]
+                ct1_index = find_ct_merge_index(ct1_id)
+                ct2_index = find_ct_merge_index(ct2_id)
+                ct1_region = find_ct_region(ct1_id)
+                ct2_region = find_ct_region(ct2_id)
+                # To have the correct order of recursion so region splits match up
+                if ct1_region < ct2_region:
+                    l_id = ct1_id
+                    l_index = ct1_index
+                    r_id = ct2_id
+                    r_index = ct2_index
+                else:
+                    l_id = ct2_id
+                    l_index = ct2_index
+                    r_id = ct1_id
+                    r_index = ct1_index
+                # don't recurse if at leaf
+                if not is_original_ct(l_id):
+                    segment_builder(level - 1, l_index, v_left_end)
+                if not is_original_ct(r_id):
+                    segment_builder(level - 1, r_index, v_right_end)
+
+            # otherwise we are just merging cell types
+            else:
+                # horizontal x-axis bar
+                h_start = root_pos.copy()
+                h_start[0] -= offset
+                h_end = root_pos.copy()
+                h_end[0] += offset
+                segments.append([h_start, h_end])
+
+                # vertical z-axis bars
+                dist = lm.loc[index, 'Distance']
+                v_left_end = h_start.copy()
+                v_left_end[2] -= dist
+                v_right_end = h_end.copy()
+                v_right_end[2] -= dist
+                segments.append([h_start, v_left_end])
+                segments.append([h_end, v_right_end])
+
+                # figure out where to recurse on
+                ct1_id, ct2_id = lm.loc[index, ['ID1', 'ID2']]
+                ct1_index = find_ct_merge_index(ct1_id)
+                ct2_index = find_ct_merge_index(ct2_id)
+
+                # don't recurse if at leaf
+                if not is_original_ct(ct1_id):
+                    segment_builder(level - 1, ct1_index, v_left_end)
+                if not is_original_ct(ct2_id):
+                    segment_builder(level - 1, ct2_index, v_right_end)
 
     def _assert_integrity(self):
         # Make sure all cell types belong to their corresponding region
@@ -117,6 +233,7 @@ class Agglomerate3D:
                                                             self.orig_cell_types[ct2_idx])
         return dists
 
+    # TODO: Make sure it works when regions with different numbers of cell types merge!!
     def _compute_bme_score(self) -> float:
         path_dists = self._compute_orig_ct_path_dists()
         linkage_dists = self._compute_orig_ct_linkage_dists()
@@ -290,7 +407,7 @@ class Agglomerate3D:
         self.linkage_history.append({'Is region': isinstance(n1, Region),
                                      'ID1': n1.id_num,
                                      'ID2': n2.id_num,
-                                     'new ID': new_node.id_num,
+                                     'New ID': new_node.id_num,
                                      'Distance': dist,
                                      'Num original': new_node.num_original,
                                      'In region': new_node.region,

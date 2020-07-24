@@ -21,7 +21,7 @@ class Node:
 
     @classmethod
     def tree_from_link_mat(cls, link_mat: pd.DataFrame):
-        ct_link_mat = link_mat.loc[link_mat['Is region'] == False]
+        ct_link_mat = link_mat.loc[~link_mat['Is region']]
 
         def recursive_tree_builder(id_num: int, parent):
             row = ct_link_mat.loc[ct_link_mat['new ID'] == id_num]
