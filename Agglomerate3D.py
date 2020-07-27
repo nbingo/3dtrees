@@ -6,9 +6,10 @@ from data_types import *
 from tqdm import tqdm
 import numpy as np
 import pandas as pd
-from mpl_toolkits.mplot3d.art3d import Line3DCollection
+# Need for 3D plotting, even though not used directly. Python is dumb
 from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
+from matplotlib import cm
 
 LINKAGE_CELL_OPTIONS = ['single', 'complete', 'average']
 LINKAGE_REGION_OPTIONS = ['single', 'complete', 'average', 'homolog_avg']
@@ -68,6 +69,9 @@ class Agglomerate3D:
     def view_tree3d(self):
         lm = self.linkage_mat
         segments = []
+        colors = []
+        num_regions = lm['In region'].max()
+        colormap = cm.get_cmap('hsv')(np.linspace(0, 1, num_regions))
         fig = plt.figure()
         ax = fig.gca(projection='3d')
 
@@ -105,20 +109,29 @@ class Agglomerate3D:
             if ct1_region < ct2_region:
                 l_index = ct1_index
                 l_id = ct1_id
+                l_region = ct1_region
                 r_index = ct2_index
                 r_id = ct2_id
+                r_region = ct2_region
             else:
                 l_index = ct2_index
                 l_id = ct2_id
+                l_region = ct2_region
                 r_index = ct1_index
                 r_id = ct1_id
+                r_region = ct1_region
 
             # horizontal x/y-axis bar
+            # Start is the left side
             h_start = root_pos.copy()
             h_start[split_axis] -= offset
+            # end is the right side
             h_end = root_pos.copy()
             h_end[split_axis] += offset
-            segments.append([h_start, h_end])
+            segments.append([h_start, root_pos])
+            colors.append(colormap[l_region])
+            segments.append([root_pos, h_end])
+            colors.append(colormap[r_region])
 
             # vertical z-axis bars
             v_left_end = h_start.copy()
@@ -126,7 +139,9 @@ class Agglomerate3D:
             v_right_end = h_end.copy()
             v_right_end[2] -= dist
             segments.append([h_start, v_left_end])
+            colors.append(colormap[l_region])
             segments.append([h_end, v_right_end])
+            colors.append(colormap[r_region])
 
             # don't recurse if at leaf, but do label
             if l_index is None:
@@ -154,20 +169,18 @@ class Agglomerate3D:
             segment_builder(top_level, top_level, root_pos)
 
         segments = np.array(segments)
-        # Position segments at z=0 plane
-        # segments[:, :, 2] -= segments[:, :, 2].min()
 
-        lc = Line3DCollection(segments, linewidths=2)
         x = segments[:, :, 0].flatten()
         y = segments[:, :, 1].flatten()
         z = segments[:, :, 2].flatten()
-        lc.set_array(z)
 
         ax.set_zlim(z.min(), z.max())
         ax.set_xlim(x.min(), x.max())
         ax.set_ylim(y.min(), y.max())
         ax.set(xlabel='Cell type', ylabel='Region', zlabel='Distance')
-        ax.add_collection3d(lc, zdir='z', zs=z)
+        for line, color in zip(segments, colors):
+            ax.plot(line[:, 0], line[:, 1], line[:, 2], color=color, lw=2)
+        # ax.add_collection3d(lc, zdir='z', zs=z)
         # plt.axis('off')
         plt.show()
 
