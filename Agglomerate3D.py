@@ -85,6 +85,7 @@ class Agglomerate3D:
             ct1_id, ct2_id = lm.loc[index, ['ID1', 'ID2']]
             ct1_index, ct1_region = find_ct_index_region(ct1_id)
             ct2_index, ct2_region = find_ct_index_region(ct2_id)
+
             if lm.loc[index, 'In reg merge']:
                 # We're drawing on the y-axis
                 split_axis = 1
@@ -93,28 +94,18 @@ class Agglomerate3D:
                 region = lm.loc[index, 'In region']
                 region_mat = lm[lm['In region'] == region]
                 dist = region_mat[region_mat['Is region']]['Distance'].iloc[0]
-
-                # To have the correct order of recursion so region splits match up
-                if ct1_region < ct2_region:
-                    l_id = ct1_id
-                    l_index = ct1_index
-                    r_id = ct2_id
-                    r_index = ct2_index
-                else:
-                    l_id = ct2_id
-                    l_index = ct2_index
-                    r_id = ct1_id
-                    r_index = ct1_index
             else:
                 # We're drawing on the x-axis
                 split_axis = 0
                 dist = lm.loc[index, 'Distance']
 
-                # We don't care about order
-                l_id = ct1_id
+            # To have the correct order of recursion so region splits match up
+            if ct1_region < ct2_region:
                 l_index = ct1_index
-                r_id = ct2_id
                 r_index = ct2_index
+            else:
+                l_index = ct2_index
+                r_index = ct1_index
 
             # horizontal x/y-axis bar
             h_start = root_pos.copy()
