@@ -68,6 +68,8 @@ class Agglomerate3D:
     def view_tree3d(self):
         lm = self.linkage_mat
         segments = []
+        fig = plt.figure()
+        ax = fig.gca(projection='3d')
 
         def find_ct_index_region(ct_id: int) -> Tuple[Union[int, None], int]:
             no_reg = lm[~lm['Is region']]
@@ -102,10 +104,14 @@ class Agglomerate3D:
             # To have the correct order of recursion so region splits match up
             if ct1_region < ct2_region:
                 l_index = ct1_index
+                l_id = ct1_id
                 r_index = ct2_index
+                r_id = ct2_id
             else:
                 l_index = ct2_index
+                l_id = ct2_id
                 r_index = ct1_index
+                r_id = ct1_id
 
             # horizontal x/y-axis bar
             h_start = root_pos.copy()
@@ -122,10 +128,20 @@ class Agglomerate3D:
             segments.append([h_start, v_left_end])
             segments.append([h_end, v_right_end])
 
-            # don't recurse if at leaf
-            if l_index is not None:
+            # don't recurse if at leaf, but do label
+            if l_index is None:
+                label = self.ct_names[l_id]
+                x, y, z = v_left_end
+                z -= 0
+                ax.text(x, y, z, label, 'z')
+            else:
                 segment_builder(level - 1, l_index, v_left_end)
-            if r_index is not None:
+            if r_index is None:
+                label = self.ct_names[r_id]
+                x, y, z = v_right_end
+                z -= 0
+                ax.text(x, y, z, label, 'z')
+            else:
                 segment_builder(level - 1, r_index, v_right_end)
 
         # Create root pos z-pos as max of sum of region and ct distances
@@ -138,19 +154,21 @@ class Agglomerate3D:
             segment_builder(top_level, top_level, root_pos)
 
         segments = np.array(segments)
+        # Position segments at z=0 plane
+        # segments[:, :, 2] -= segments[:, :, 2].min()
+
         lc = Line3DCollection(segments, linewidths=2)
         x = segments[:, :, 0].flatten()
         y = segments[:, :, 1].flatten()
         z = segments[:, :, 2].flatten()
         lc.set_array(z)
 
-        fig = plt.figure()
-        ax = fig.gca(projection='3d')
         ax.set_zlim(z.min(), z.max())
         ax.set_xlim(x.min(), x.max())
         ax.set_ylim(y.min(), y.max())
+        ax.set(xlabel='Cell type', ylabel='Region', zlabel='Distance')
         ax.add_collection3d(lc, zdir='z', zs=z)
-        plt.axis('off')
+        # plt.axis('off')
         plt.show()
 
     def _assert_integrity(self):
