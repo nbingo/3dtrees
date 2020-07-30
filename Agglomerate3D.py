@@ -70,7 +70,7 @@ class Agglomerate3D:
         lm = self.linkage_mat
         segments = []
         colors = []
-        num_regions = lm['In region'].max()
+        num_regions = lm['In region'].max() + 1
         colormap = cm.get_cmap('hsv')(np.linspace(0, 1, num_regions))
         fig = plt.figure()
         ax = fig.gca(projection='3d')
