@@ -6,10 +6,11 @@ from data_types import *
 from tqdm import tqdm
 import numpy as np
 import pandas as pd
-# Need for 3D plotting, even though not used directly. Python is dumb
-from mpl_toolkits.mplot3d import Axes3D
 import matplotlib.pyplot as plt
 from matplotlib import cm
+# Need for 3D plotting, even though not used directly. Python is dumb
+# noinspection PyUnresolvedReferences
+from mpl_toolkits.mplot3d import Axes3D
 
 LINKAGE_CELL_OPTIONS = ['single', 'complete', 'average']
 LINKAGE_REGION_OPTIONS = ['single', 'complete', 'average', 'homolog_avg']
@@ -62,10 +63,6 @@ class Agglomerate3D:
             return pd.DataFrame(self.linkage_history)
         return self._linkage_mat
 
-    @property
-    def linkage_tree(self) -> Node:
-        return Node.tree_from_link_mat(self.linkage_mat)
-
     def view_tree3d(self):
         lm = self.linkage_mat
         segments = []
@@ -86,7 +83,7 @@ class Agglomerate3D:
             if ct_row.empty:
                 return None, self.orig_cell_types[ct_id].region
             # not one of the original ones, so have to check which region it's in
-            return ct_row.index[-1], ct_row['In region'].iloc[-1]
+            return ct_row.index[-1], ct_row['In region'].iat[-1]
 
         def segment_builder(level: int, index: int, root_pos: List[int]):
             offset = 2 ** (level - 1)  # subtract 1 to divide by 2 since it's only half the line
@@ -103,7 +100,7 @@ class Agglomerate3D:
                 # Find the region we're merging in
                 region = lm.loc[index, 'In region']
                 region_mat = lm[lm['In region'] == region]
-                dist = region_mat[region_mat['Is region']]['Distance'].iloc[0]
+                dist = region_mat[region_mat['Is region']]['Distance'].iat[0]
             else:
                 # We're drawing on the x-axis
                 split_axis = 0
@@ -167,13 +164,13 @@ class Agglomerate3D:
                     segment_builder(level - 1, r_index, v_right_end)
 
         # Create root pos z-pos as max of sum of region and ct distances
-        root_pos = [0, 0, lm['Distance'].sum()]
+        top_root_pos = [0, 0, lm['Distance'].sum()]
         top_level = len(lm.index) - 1
         # Should only happen if our tree starts with a region merger, which must consist of two cell types
         if lm.loc[top_level, 'Is region']:
-            segment_builder(top_level, top_level - 1, root_pos)
+            segment_builder(top_level, top_level - 1, top_root_pos)
         else:
-            segment_builder(top_level, top_level, root_pos)
+            segment_builder(top_level, top_level, top_root_pos)
 
         segments = np.array(segments)
 
@@ -205,27 +202,32 @@ class Agglomerate3D:
         assert not self.linkage_mat.empty, 'Tried tracing empty tree.'
 
         paths: Dict[int, List[int]] = {}
+        # Get only cell types
+        lm = self.linkage_mat[~self.linkage_mat['Is region']]
+        # Reduce to only ID numbers in numpy
+        lm = lm[['ID1', 'ID2', 'New ID']].to_numpy()
+        # Aliases for numpy indices
+        ids = [0, 1]
+        new_id = 2
 
-        def dfs(node: Node, path: List[int]):
-            # we are a leaf node
-            if node.right is None:
-                # by construction, either left and right are None, or neither is None
-                assert node.left is None
-                paths[node.id_num] = path.copy()
-            else:
-                # choose
-                path.append(node.right.id_num)
-                # explore
-                dfs(node.right, path)
-                # un-choose
-                path.pop()
+        def dfs(row: np.array, path: List[int]):
+            for id_idx in ids:
+                # If there's a child on the side we're looking at
+                if ~np.isnan(row[id_idx]):
+                    # Is it a leaf node
+                    if row[id_idx] in self.orig_cell_types:
+                        path.append(row[id_idx])
+                        paths[row[id_idx]] = path.copy()
+                        path.pop()
+                    else:
+                        # choose
+                        path.append(row[id_idx])
+                        # explore
+                        dfs(lm[lm[:, new_id] == row[id_idx]].squeeze(), path)
+                        # un-choose
+                        path.pop()
 
-                # repeat for left
-                path.append(node.left.id_num)
-                dfs(node.left, path)
-                path.pop()
-
-        dfs(self.linkage_tree, [])
+        dfs(lm[-1], [lm[-1, new_id]])
         return paths
 
     def _compute_orig_ct_path_dists(self):

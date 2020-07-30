@@ -30,5 +30,6 @@ if __name__ == '__main__':
     pd.set_option('display.expand_frame_repr', False)
     pd.set_option('display.max_columns', None)
     print(agglomerate.linkage_mat_readable)
-    print(agglomerate.view_tree3d())
+    print(agglomerate.compute_tree_score('BME'))
+    agglomerate.view_tree3d()
     print(f'Total time elapsed: {(end - start) / 10}s')
