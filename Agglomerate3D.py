@@ -75,22 +75,26 @@ class Agglomerate3D:
         fig = plt.figure()
         ax = fig.gca(projection='3d')
 
-        def find_ct_index_region(ct_id: int) -> Tuple[Union[int, None], int]:
-            no_reg = lm[~lm['Is region']]
+        def find_ct_index_region(ct_id: int, index: int) -> Tuple[Union[int, None], Union[int, None]]:
+            if np.isnan(ct_id):
+                return np.nan, np.nan
+            # Cutoff at where we currently are so we don't repeat rows
+            lm_bound = lm.loc[:index - 1]
+            no_reg = lm_bound[~lm_bound['Is region']]
             ct_row = no_reg[no_reg['New ID'] == ct_id]
             # one of the original cell types
             if ct_row.empty:
                 return None, self.orig_cell_types[ct_id].region
             # not one of the original ones, so have to check which region it's in
-            return ct_row.index[0], ct_row['In region'].iloc[0]
+            return ct_row.index[-1], ct_row['In region'].iloc[-1]
 
         def segment_builder(level: int, index: int, root_pos: List[int]):
             offset = 2 ** (level - 1)  # subtract 1 to divide by 2 since it's only half the line
 
             # figure out where to recurse on
             ct1_id, ct2_id = lm.loc[index, ['ID1', 'ID2']]
-            ct1_index, ct1_region = find_ct_index_region(ct1_id)
-            ct2_index, ct2_region = find_ct_index_region(ct2_id)
+            ct1_index, ct1_region = find_ct_index_region(ct1_id, index)
+            ct2_index, ct2_region = find_ct_index_region(ct2_id, index)
 
             if lm.loc[index, 'In reg merge']:
                 # We're drawing on the y-axis
@@ -106,8 +110,9 @@ class Agglomerate3D:
                 dist = lm.loc[index, 'Distance']
 
             # To have the correct order of recursion so region splits match up
-            if ct1_region < ct2_region:
-                l_index = ct1_index
+            # Also the case in which a cell type is just transferred between regions
+            if (np.isnan(ct2_region)) or (ct1_region < ct2_region):
+                l_index = None if ct1_index == index else ct1_index
                 l_id = ct1_id
                 l_region = ct1_region
                 r_index = ct2_index
@@ -130,8 +135,10 @@ class Agglomerate3D:
             h_end[split_axis] += offset
             segments.append([h_start, root_pos])
             colors.append(colormap[l_region])
-            segments.append([root_pos, h_end])
-            colors.append(colormap[r_region])
+            # Don't do if just transferring one cell type to another region
+            if ~np.isnan(r_region):
+                segments.append([root_pos, h_end])
+                colors.append(colormap[r_region])
 
             # vertical z-axis bars
             v_left_end = h_start.copy()
@@ -140,24 +147,24 @@ class Agglomerate3D:
             v_right_end[2] -= dist
             segments.append([h_start, v_left_end])
             colors.append(colormap[l_region])
-            segments.append([h_end, v_right_end])
-            colors.append(colormap[r_region])
+            # Don't do if just transferring one cell type to another region
+            if ~np.isnan(r_region):
+                segments.append([h_end, v_right_end])
+                colors.append(colormap[r_region])
 
             # don't recurse if at leaf, but do label
             if l_index is None:
-                label = self.ct_names[l_id]
-                x, y, z = v_left_end
-                z -= 0
-                ax.text(x, y, z, label, 'z')
+                label = self.ct_names[int(l_id)]
+                ax.text(*v_left_end, label, 'z')
             else:
                 segment_builder(level - 1, l_index, v_left_end)
-            if r_index is None:
-                label = self.ct_names[r_id]
-                x, y, z = v_right_end
-                z -= 0
-                ax.text(x, y, z, label, 'z')
-            else:
-                segment_builder(level - 1, r_index, v_right_end)
+            # Don't do if just transferring one cell type to another region
+            if ~np.isnan(r_region):
+                if r_index is None:
+                    label = self.ct_names[int(r_id)]
+                    ax.text(*v_right_end, label, 'z')
+                else:
+                    segment_builder(level - 1, r_index, v_right_end)
 
         # Create root pos z-pos as max of sum of region and ct distances
         root_pos = [0, 0, lm['Distance'].sum()]
@@ -386,6 +393,7 @@ class Agglomerate3D:
             for ct in r_leftover.cell_types.values():
                 ct.region = self.r_id_idx
                 self.regions[self.r_id_idx].cell_types[ct.id_num] = ct
+                self._record_ct_transfer(ct, r_leftover.id_num)
             r_leftover.cell_types.clear()
 
         # make sure no cell types are leftover in the regions we're about to delete
@@ -403,10 +411,23 @@ class Agglomerate3D:
         self.r_id_idx += 1
         return self.r_id_idx - 1
 
+    def _record_ct_transfer(self, ct: CellType, orig_region_id: int):
+        assert ct.region != orig_region_id, 'Tried transferring cell type to the same region'
+        self.linkage_history.append({'Is region': False,
+                                     'ID1': ct.id_num,
+                                     'ID2': None,
+                                     'New ID': ct.id_num,
+                                     'Distance': None,
+                                     'Num original': ct.num_original,
+                                     'In region': ct.region,
+                                     'In reg merge': True,
+                                     'Cell type num diff': None
+                                     })
+
     def _record_link(self, n1: Mergeable, n2: Mergeable, new_node: Mergeable, dist: float,
                      ct_num_diff: Optional[int] = None):
         # Must be recording the linkage of two things of the same type
-        assert type(n1) is type(n2), 'Tried recording linkage of a cell type with a region.'
+        assert type(n1) == type(n2), 'Tried recording linkage of a cell type with a region.'
 
         if self.pbar is not None:
             self.pbar.update(1)
@@ -429,12 +450,12 @@ class Agglomerate3D:
         lm = self.linkage_mat.copy()
         id_to_ct = {i: self.ct_names[i] for i in range(len(self.ct_names))}
         id_to_r = {i: self.r_names[i] for i in range(len(self.r_names))}
+        cols = ['ID1', 'ID2', 'New ID']
         for i in lm.index:
             id_to_x = id_to_r if lm.loc[i, 'Is region'] else id_to_ct
-            if lm.loc[i, 'ID1'] in id_to_x:
-                lm.loc[i, 'ID1'] = id_to_x[lm.loc[i, 'ID1']]
-            if lm.loc[i, 'ID2'] in id_to_x:
-                lm.loc[i, 'ID2'] = id_to_x[lm.loc[i, 'ID2']]
+            for col in cols:
+                if lm.loc[i, col] in id_to_x:
+                    lm.loc[i, col] = id_to_x[lm.loc[i, col]]
             if lm.loc[i, 'In region'] in id_to_r:
                 lm.loc[i, 'In region'] = id_to_r[lm.loc[i, 'In region']]
 
