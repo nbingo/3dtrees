@@ -82,7 +82,7 @@ class Agglomerate3D:
             lm_bound = lm.loc[:index - 1]
             no_reg = lm_bound[~lm_bound['Is region']]
             ct_row = no_reg[no_reg['New ID'] == ct_id]
-            # one of the original cell types
+            # one of the original cell types and at the end of a branch
             if ct_row.empty:
                 return None, self.orig_cell_types[ct_id].region
             # not one of the original ones, so have to check which region it's in
@@ -391,9 +391,15 @@ class Agglomerate3D:
         if r1.num_cell_types > 0 or r2.num_cell_types > 0:
             r_leftover = r1 if r1.num_cell_types > 0 else r2
             for ct in r_leftover.cell_types.values():
-                ct.region = self.r_id_idx
-                self.regions[self.r_id_idx].cell_types[ct.id_num] = ct
-                self._record_ct_transfer(ct, r_leftover.id_num)
+                # Essentially copy the cell type but into a new region and with a new ID
+                new_ct = CellType(self.ct_id_idx, self.r_id_idx, ct.transcriptome)
+                self.cell_types[new_ct.id_num] = new_ct
+                self.regions[self.r_id_idx].cell_types[new_ct.id_num] = new_ct
+                # Delete the old cell type
+                self.cell_types.pop(ct.id_num)
+                # Record the transfer
+                self._record_ct_transfer(ct, new_ct)
+                self.ct_id_idx += 1
             r_leftover.cell_types.clear()
 
         # make sure no cell types are leftover in the regions we're about to delete
@@ -411,15 +417,15 @@ class Agglomerate3D:
         self.r_id_idx += 1
         return self.r_id_idx - 1
 
-    def _record_ct_transfer(self, ct: CellType, orig_region_id: int):
-        assert ct.region != orig_region_id, 'Tried transferring cell type to the same region'
+    def _record_ct_transfer(self, ct_orig: CellType, ct_new: CellType):
+        assert ct_orig.region != ct_new.region, 'Tried transferring cell type to the same region'
         self.linkage_history.append({'Is region': False,
-                                     'ID1': ct.id_num,
+                                     'ID1': ct_orig.id_num,
                                      'ID2': None,
-                                     'New ID': ct.id_num,
+                                     'New ID': ct_new.id_num,
                                      'Distance': None,
-                                     'Num original': ct.num_original,
-                                     'In region': ct.region,
+                                     'Num original': ct_new.num_original,
+                                     'In region': ct_new.region,
                                      'In reg merge': True,
                                      'Cell type num diff': None
                                      })
