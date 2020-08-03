@@ -6,11 +6,19 @@ P_VAL_ADJ_THRESH = 0.01
 AVG_LOG_FC_THRESH = 2
 
 
-def read_data(species: List[str], deg_species: Optional[List[str]] = None, preprocess: Optional[bool] = True):
+def read_data(species: List[str],
+              deg_species: Optional[List[str]] = None,
+              orthologs: Optional[bool] = True,
+              preprocess: Optional[bool] = True
+              ):
     if deg_species is None:
         deg_species = species
+    if orthologs:
+        postfix = 'DEGs.csv'
+    else:
+        postfix = 'DEGs_allgenes.csv'
 
-    species_degs = [pd.read_csv(f'TranscriptomeData/Nomi_{s}DEGs.csv', header=0, index_col=0) for s in deg_species]
+    species_degs = [pd.read_csv(f'TranscriptomeData/Nomi_{s}{postfix}', header=0, index_col=0) for s in deg_species]
     species_data = [pd.read_csv(f'TranscriptomeData/Nomi_{s}allaverage.csv', header=0, index_col=0) for s in species]
 
     if preprocess:

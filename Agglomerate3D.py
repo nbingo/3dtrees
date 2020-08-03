@@ -4,10 +4,11 @@ from data_utils import get_region
 from itertools import combinations, product
 from data_types import *
 from tqdm import tqdm
+from matplotlib import cm
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from matplotlib import cm
+import functools
 # Need for 3D plotting, even though not used directly. Python is dumb
 # noinspection PyUnresolvedReferences
 from mpl_toolkits.mplot3d import Axes3D
@@ -17,6 +18,7 @@ LINKAGE_REGION_OPTIONS = ['single', 'complete', 'average', 'homolog_avg']
 TREE_SCORE_OPTIONS = ['ME', 'BME', 'MP']
 
 
+@functools.total_ordering
 class Agglomerate3D:
     def __init__(self,
                  cell_type_affinity: Callable,
@@ -56,6 +58,12 @@ class Agglomerate3D:
                f'linkage_region={self.linkage_region}, ' \
                f'max_region_diff={self.max_region_diff}, ' \
                f'region_dist_scale={self.region_dist_scale}>'
+
+    def __eq__(self, other):
+        return len(self.linkage_mat.index) == len(other.linkage_mat.index)
+
+    def __lt__(self, other):
+        return len(self.linkage_mat.index) < len(other.linkage_mat.index)
 
     @property
     def linkage_mat(self) -> pd.DataFrame:

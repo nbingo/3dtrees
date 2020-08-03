@@ -103,11 +103,20 @@ class BatchAgglomerate3D:
     def _basic_score_func(a: Agglomerate3D) -> List[float]:
         return [a.compute_tree_score(m) for m in TREE_SCORE_OPTIONS]
 
-    def get_best_agglomerators(self) -> Dict[str, Tuple[float, Agglomerate3D]]:
+    def get_best_agglomerators(self) -> Dict[str, Tuple[float, np.array]]:
         self._compute_tree_scores(func=self._basic_score_func, callback=self._collect_basic_scores)
 
+        # best_agglomerators: Dict[str, Tuple[float, Agglomerate3D]] = {
+        #     metric: (np.min(self.tree_scores[metric]), self.agglomerators[int(np.argmin(self.tree_scores[metric]))])
+        #     for metric in TREE_SCORE_OPTIONS
+        # }
         best_agglomerators: Dict[str, Tuple[float, Agglomerate3D]] = {
-            metric: (np.min(self.tree_scores[metric]), self.agglomerators[int(np.argmin(self.tree_scores[metric]))])
+            metric: (
+                np.min(self.tree_scores[metric]),
+                np.unique(
+                    np.array(self.agglomerators)[np.where(self.tree_scores[metric] == np.min(self.tree_scores[metric]))]
+                )
+            )
             for metric in TREE_SCORE_OPTIONS
         }
 
