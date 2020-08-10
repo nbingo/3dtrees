@@ -1,5 +1,4 @@
 import numpy as np
-import pandas as pd
 
 from matplotlib import pyplot as plt
 from matplotlib import rcParams
@@ -8,7 +7,7 @@ from scipy.cluster.hierarchy import dendrogram
 from scipy.stats import spearmanr
 from sklearn.cluster import AgglomerativeClustering
 
-from data_utils import read_data
+from data.data_utils import read_data
 
 rcParams.update({'figure.autolayout': True})
 

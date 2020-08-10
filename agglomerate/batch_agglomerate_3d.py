@@ -1,5 +1,5 @@
 from typing import Callable, Optional, List, Dict, Iterable, Tuple
-from Agglomerate3D import Agglomerate3D, TREE_SCORE_OPTIONS
+from agglomerate.agglomerate_3d import Agglomerate3D, TREE_SCORE_OPTIONS
 from itertools import product
 import multiprocessing as mp
 import pandas as pd

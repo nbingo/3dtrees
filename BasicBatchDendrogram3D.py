@@ -1,9 +1,8 @@
-from BatchAgglomerate3D import BatchAgglomerate3D, TREE_SCORE_OPTIONS
-from data_utils import read_data
+from agglomerate.batch_agglomerate_3d import BatchAgglomerate3D
+from data.data_utils import read_data
 from metric_utils import *
 import pandas as pd
 import numpy as np
-import matplotlib.pyplot as plt
 
 if __name__ == '__main__':
     data = read_data(['chicken', 'mouse'], ['chicken', 'mouse'], orthologs=True)

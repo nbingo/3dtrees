@@ -1,5 +1,5 @@
-from Agglomerate3D import Agglomerate3D
-from data_utils import read_data
+from agglomerate.agglomerate_3d import Agglomerate3D
+from data.data_utils import read_data
 from scipy.stats import spearmanr
 import pandas as pd
 import time
