@@ -1,8 +1,8 @@
-from typing import List, Callable, Tuple
+from typing import List, Callable, Tuple, Optional, Dict, Union
 from queue import PriorityQueue
 from data_utils import get_region
 from itertools import combinations, product
-from data_types import *
+from data_types import Region, CellType, Edge, Mergeable
 from tqdm import tqdm
 from matplotlib import cm
 import numpy as np
@@ -192,8 +192,6 @@ class Agglomerate3D:
         ax.set(xlabel='Cell type', ylabel='Region', zlabel='Distance')
         for line, color in zip(segments, colors):
             ax.plot(line[:, 0], line[:, 1], line[:, 2], color=color, lw=2)
-        # ax.add_collection3d(lc, zdir='z', zs=z)
-        # plt.axis('off')
         plt.show()
 
     def _assert_integrity(self):
