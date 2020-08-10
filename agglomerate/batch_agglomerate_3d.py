@@ -37,8 +37,16 @@ class BatchAgglomerate3D:
             ]))))
 
     @staticmethod
-    def _agglomerate_func(cta, lc, lr, mrd, rp, ic, data):
-        agglomerate = Agglomerate3D(cta, lc, lr, mrd, rp, verbose=False, pbar=False, integrity_check=ic)
+    def _agglomerate_func(cta, lc, lr, mrd, rds, ic, data):
+        agglomerate = Agglomerate3D(linkage_cell=lc,
+                                    linkage_region=lr,
+                                    cell_type_affinity=cta,
+                                    max_region_diff=mrd,
+                                    region_dist_scale=rds,
+                                    verbose=False,
+                                    pbar=False,
+                                    integrity_check=ic
+                                    )
         agglomerate.agglomerate(data)
         return agglomerate
 
@@ -48,15 +56,15 @@ class BatchAgglomerate3D:
 
     def agglomerate(self, data: pd.DataFrame):
         pool = mp.Pool(mp.cpu_count())
-        for cta, lc, lr, mrd, rds in product(self.cell_type_affinity,
-                                             self.linkage_cell,
+        for lc, lr, cta, mrd, rds in product(self.linkage_cell,
                                              self.linkage_region,
+                                             self.cell_type_affinity,
                                              self.max_region_diff,
                                              self.region_dist_scale):
             if self.verbose:
                 print(f'Starting agglomeration with {cta, lc, lr, mrd, rds, self.integrity_check}')
             pool.apply_async(self._agglomerate_func,
-                             args=(cta, lc, lr, mrd, rds, self.integrity_check, data),
+                             args=(lc, lr, cta, mrd, rds, self.integrity_check, data),
                              callback=self._collect_agglomerators)
         pool.close()
         pool.join()
