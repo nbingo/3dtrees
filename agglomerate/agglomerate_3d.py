@@ -21,21 +21,23 @@ TREE_SCORE_OPTIONS = ['ME', 'BME', 'MP']
 @functools.total_ordering
 class Agglomerate3D:
     def __init__(self,
-                 cell_type_affinity: Callable,
                  linkage_cell: str,
                  linkage_region: str,
+                 cell_type_affinity: Callable,
+                 region_affinity: Optional[Callable] = None,
                  max_region_diff: Optional[int] = 0,
                  region_dist_scale: Optional[float] = 1,
                  verbose: Optional[bool] = False,
                  pbar: Optional[bool] = False,
                  integrity_check: Optional[bool] = True):
-        self.cell_type_affinity = cell_type_affinity
-        self.linkage_cell = linkage_cell
-        self.linkage_region = linkage_region
-        self.max_region_diff = max_region_diff
-        self.region_dist_scale = region_dist_scale
-        self.verbose = verbose
-        self.integrity_check = integrity_check
+        self.linkage_cell: str = linkage_cell
+        self.linkage_region: str = linkage_region
+        self.cell_type_affinity: Callable = cell_type_affinity
+        self.region_affinity: Callable = region_affinity
+        self.max_region_diff: int = max_region_diff
+        self.region_dist_scale: float = region_dist_scale
+        self.verbose: bool = verbose
+        self.integrity_check: bool = integrity_check
         self.linkage_history: List[Dict[str, int]] = []
         self._linkage_mat: pd.DataFrame = pd.DataFrame()
         self.regions: Dict[int, Region] = {}
@@ -51,6 +53,11 @@ class Agglomerate3D:
         if linkage_region not in LINKAGE_REGION_OPTIONS:
             raise UserWarning(f'Incorrect argument passed in for region linkage. Must be one of '
                               f'{LINKAGE_REGION_OPTIONS}')
+        # Init affinity and linkage for cell types and regions
+        CellType.linkage = self.linkage_cell
+        CellType.affinity = self.cell_type_affinity
+        Region.linkage = self.linkage_region
+        Region.affinity = self.region_affinity
 
     def __repr__(self):
         return f'Agglomerate3D<cell_type_affinity={self.cell_type_affinity}, ' \
@@ -253,11 +260,9 @@ class Agglomerate3D:
         num_ct = len(self.orig_cell_types)
         dists = np.zeros((num_ct, num_ct))
         for ct1_idx, ct2_idx in product(range(num_ct), range(num_ct)):
-            dists[ct1_idx, ct2_idx] = self._compute_ct_dist(self.orig_cell_types[ct1_idx],
-                                                            self.orig_cell_types[ct2_idx])
+            dists[ct1_idx, ct2_idx] = CellType.diff(self.orig_cell_types[ct1_idx], self.orig_cell_types[ct2_idx])
         return dists
 
-    # TODO: Make sure it works when regions with different numbers of cell types merge!!
     def _compute_bme_score(self) -> float:
         path_dists = self._compute_orig_ct_path_dists()
         linkage_dists = self._compute_orig_ct_linkage_dists()
@@ -282,50 +287,6 @@ class Agglomerate3D:
             return self._compute_mp_score()
         elif metric == 'BME':
             return self._compute_bme_score()
-
-    # noinspection PyArgumentList
-    def _compute_ct_dist(self, ct1: CellType, ct2: CellType) -> np.float64:
-        dists = np.zeros((ct1.num_original, ct2.num_original))
-        # Compute distance matrix
-        # essentially only useful if this is working on merged cell types
-        # otherwise just produces a matrix containing one value
-        for ct1_idx, ct2_idx in product(range(ct1.num_original), range(ct2.num_original)):
-            dists[ct1_idx, ct2_idx] = self.cell_type_affinity(ct1.transcriptome[ct1_idx], ct2.transcriptome[ct2_idx])
-        if self.linkage_cell == 'single':
-            dist = dists.min()
-        elif self.linkage_cell == 'complete':
-            dist = dists.max()
-        else:  # default to 'average'
-            dist = dists.mean()
-
-        return np.float64(dist)
-
-    # noinspection PyArgumentList
-    def _compute_region_dist(self, r1: Region, r2: Region) -> np.float64:
-        ct_dists = np.zeros((len(r1.cell_types), len(r2.cell_types)))
-        r1_ct_list = list(r1.cell_types.values())
-        r2_ct_list = list(r2.cell_types.values())
-        for r1_idx, r2_idx in product(range(r1.num_cell_types), range(r2.num_cell_types)):
-            ct_dists[r1_idx, r2_idx] = self._compute_ct_dist(r1_ct_list[r1_idx], r2_ct_list[r2_idx])
-
-        if self.linkage_region == 'single':
-            dist = ct_dists.min()
-        elif self.linkage_region == 'complete':
-            dist = ct_dists.max()
-        elif self.linkage_region == 'homolog_avg':
-            dists = []
-            for i in range(np.min(ct_dists.shape)):
-                # Add the distance between the two closest cell types (can consider as homologs)
-                dists.append(ct_dists.min())
-                # Delete these two homologs from the distance matrix
-                ct_min1_idx, ct_min2_idx = np.unravel_index(np.argmin(ct_dists), ct_dists.shape)
-                ct_dists = np.delete(ct_dists, ct_min1_idx, axis=0)
-                ct_dists = np.delete(ct_dists, ct_min2_idx, axis=1)
-            dist = np.mean(dists)
-        else:  # default to 'average':
-            dist = ct_dists.mean()
-
-        return dist
 
     def _merge_cell_types(self, ct1: CellType, ct2: CellType, ct_dist: float, region_id: Optional[int] = None):
         # must be in same region if not being created into a new region
@@ -374,8 +335,7 @@ class Agglomerate3D:
         self.regions[self.r_id_idx] = Region(self.r_id_idx)
         pairwise_r_ct_dists = np.zeros((len(r1.cell_types), len(r2.cell_types)))
         for r1_ct_idx, r2_ct_idx in product(range(len(r1_ct_list)), range(len(r2_ct_list))):
-            pairwise_r_ct_dists[r1_ct_idx, r2_ct_idx] = self._compute_ct_dist(r1_ct_list[r1_ct_idx],
-                                                                              r2_ct_list[r2_ct_idx])
+            pairwise_r_ct_dists[r1_ct_idx, r2_ct_idx] = CellType.diff(r1_ct_list[r1_ct_idx], r2_ct_list[r2_ct_idx])
         # Continuously pair up cell types, merge them, add them to the new region, and delete them
         while np.prod(pairwise_r_ct_dists.shape) != 0:
             ct_merge1_idx, ct_merge2_idx = np.unravel_index(np.argmin(pairwise_r_ct_dists),
@@ -506,7 +466,7 @@ class Agglomerate3D:
             # Compute distances of all possible edges between cell types in the same region
             for region in self.regions.values():
                 for ct1, ct2 in combinations(list(region.cell_types.values()), 2):
-                    dist = self._compute_ct_dist(ct1, ct2)
+                    dist = CellType.diff(ct1, ct2)
                     # add the edge with the desired distance to the priority queue
                     ct_dists.put(Edge(dist, ct1, ct2))
 
@@ -517,7 +477,7 @@ class Agglomerate3D:
                 if np.abs(r1.num_cell_types - r2.num_cell_types) > self.max_region_diff:
                     continue
 
-                dist = self._compute_region_dist(r1, r2)
+                dist = Region.diff(r1, r2)
                 r_dists.put(Edge(dist, r1, r2))
 
             # Now go on to merge step!
