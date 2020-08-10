@@ -9,9 +9,10 @@ from tqdm import tqdm
 
 class BatchAgglomerate3D:
     def __init__(self,
-                 cell_type_affinity: List[Callable],
                  linkage_cell: List[str],
                  linkage_region: List[str],
+                 cell_type_affinity: List[Callable],
+                 region_affinity: Optional[Callable],
                  max_region_diff: Optional[List[int]] = None,
                  region_dist_scale: Optional[Iterable[float]] = None,
                  verbose: Optional[bool] = False,
@@ -21,9 +22,10 @@ class BatchAgglomerate3D:
             region_dist_scale = [1]
         if max_region_diff is None:
             max_region_diff = [0]
-        self.cell_type_affinity = cell_type_affinity
         self.linkage_cell = linkage_cell
         self.linkage_region = linkage_region
+        self.cell_type_affinity = cell_type_affinity
+        self.region_affinity = region_affinity
         self.max_region_diff = max_region_diff
         self.region_dist_scale = region_dist_scale
         self.verbose = verbose
@@ -80,9 +82,9 @@ class BatchAgglomerate3D:
 
     @staticmethod
     def _augmented_score_func(a: Agglomerate3D) -> Tuple[str, str, int, float, List[float]]:
-        return a.linkage_cell, \
-               a.linkage_region, \
-               a.max_region_diff, \
+        return a.linkage_cell,   \
+               a.linkage_region,  \
+               a.max_region_diff,  \
                a.region_dist_scale, \
                [a.compute_tree_score(m) for m in TREE_SCORE_OPTIONS]
 

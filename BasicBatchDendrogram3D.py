@@ -7,9 +7,9 @@ import numpy as np
 if __name__ == '__main__':
     data = read_data(['chicken', 'mouse'], ['chicken', 'mouse'], orthologs=True)
     agglomerate = BatchAgglomerate3D(
-        cell_type_affinity=[spearmanr_connectivity],
         linkage_cell=['complete'],
         linkage_region=['homolog_avg'],
+        cell_type_affinity=[spearmanr_connectivity],
         max_region_diff=[1],
         region_dist_scale=np.arange(0.5, 1.5, 0.005),
         verbose=False
