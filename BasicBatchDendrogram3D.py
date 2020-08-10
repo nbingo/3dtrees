@@ -1,6 +1,6 @@
 from agglomerate.batch_agglomerate_3d import BatchAgglomerate3D
 from data.data_utils import read_data
-from metric_utils import *
+from metrics.metric_utils import *
 import pandas as pd
 import numpy as np
 

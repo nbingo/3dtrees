@@ -1,16 +1,11 @@
 from agglomerate.agglomerate_3d import Agglomerate3D
 from data.data_utils import read_data
-from scipy.stats import spearmanr
+from metrics.metric_utils import spearmanr_connectivity
 import pandas as pd
 import time
 
 if __name__ == '__main__':
     data = read_data(['chicken', 'mouse'], ['chicken', 'mouse'], orthologs=False)
-
-    def spearmanr_connectivity(x, y):
-        # data is assumed to be (n_variables, n_examples)
-        rho, _ = spearmanr(x, y, axis=1)
-        return 1 - rho
 
     agglomerate = Agglomerate3D(
         cell_type_affinity=spearmanr_connectivity,
