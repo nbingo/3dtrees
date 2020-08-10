@@ -3,9 +3,10 @@ from data_utils import read_data
 from metric_utils import *
 import pandas as pd
 import numpy as np
+import matplotlib.pyplot as plt
 
 if __name__ == '__main__':
-    data = read_data(['mouse'])
+    data = read_data(['chicken', 'mouse'], ['chicken', 'mouse'], orthologs=True)
     agglomerate = BatchAgglomerate3D(
         cell_type_affinity=[spearmanr_connectivity],
         linkage_cell=['complete'],
@@ -18,10 +19,14 @@ if __name__ == '__main__':
     agglomerate.agglomerate(data)
     best_agglomerators = agglomerate.get_best_agglomerators()
     pd.options.display.width = 0
+    best_agglomerators['BME'][1][2].view_tree3d()
+    print(best_agglomerators['BME'][1][0].region_dist_scale)
     # for metric in TREE_SCORE_OPTIONS:
-    for metric in ['BME']:
-        print(f'Best {metric} score: {best_agglomerators[metric][0]}\n'
-              f'Agglomerator: {best_agglomerators[metric][1]}\n'
-              f'region_dist_scale: {best_agglomerators[metric][1].region_dist_scale}\n'
-              f'Tree:\n{best_agglomerators[metric][1].linkage_mat_readable}\n\n')
-        best_agglomerators[metric][1].view_tree3d()
+    # for metric in ['BME']:
+    #     print(f'Best {metric} score: {best_agglomerators[metric][0]}\n')
+    #     for agglomerator in best_agglomerators[metric][1]:
+    #         print(f'Agglomerator: {agglomerator}\n'
+    #               f'region_dist_scale: {agglomerator.region_dist_scale}\n'
+    #               f'Tree:\n{agglomerator.linkage_mat_readable}\n\n')
+    #         if input('View tree? ([y]/n): ') == 'y':
+    #             agglomerator.view_tree3d()
