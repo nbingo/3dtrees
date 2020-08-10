@@ -1,4 +1,7 @@
-#Pycharm stuff
+# Local results and data
+tree-score-plots
+
+# Pycharm stuff
 .idea
 
 # Byte-compiled / optimized / DLL files
