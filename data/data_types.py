@@ -110,8 +110,8 @@ class Region(Mergeable):
     def diff(cls, lhs: Region, rhs: Region):
         ct_dists = np.zeros((lhs.num_cell_types, rhs.num_cell_types))
         r1_ct_list = list(lhs.cell_types.values())
-        r2_ct_list = list(lhs.cell_types.values())
-        for r1_idx, r2_idx in product(range(rhs.num_cell_types), range(rhs.num_cell_types)):
+        r2_ct_list = list(rhs.cell_types.values())
+        for r1_idx, r2_idx in product(range(lhs.num_cell_types), range(rhs.num_cell_types)):
             ct_dists[r1_idx, r2_idx] = CellType.diff(r1_ct_list[r1_idx], r2_ct_list[r2_idx])
 
         if cls.linkage == 'single':
