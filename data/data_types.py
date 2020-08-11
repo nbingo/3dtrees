@@ -108,7 +108,7 @@ class Region(Mergeable):
     # noinspection PyArgumentList
     @classmethod
     def diff(cls, lhs: Region, rhs: Region):
-        ct_dists = np.zeros((len(lhs.cell_types), len(rhs.cell_types)))
+        ct_dists = np.zeros((lhs.num_cell_types, rhs.num_cell_types))
         r1_ct_list = list(lhs.cell_types.values())
         r2_ct_list = list(lhs.cell_types.values())
         for r1_idx, r2_idx in product(range(rhs.num_cell_types), range(rhs.num_cell_types)):

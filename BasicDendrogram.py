@@ -7,7 +7,7 @@ from scipy.cluster.hierarchy import dendrogram
 from scipy.stats import spearmanr
 from sklearn.cluster import AgglomerativeClustering
 
-from data.data_utils import read_data
+from data.data_loader import read_data
 
 rcParams.update({'figure.autolayout': True})
 

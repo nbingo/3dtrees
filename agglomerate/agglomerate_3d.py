@@ -1,6 +1,6 @@
 from typing import List, Callable, Tuple, Optional, Dict, Union
 from queue import PriorityQueue
-from data.data_utils import get_region
+from data.data_loader import get_region
 from itertools import combinations, product
 from data.data_types import Region, CellType, Edge, Mergeable
 from tqdm import tqdm
