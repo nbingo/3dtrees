@@ -1,6 +1,7 @@
 from typing import Callable, Optional, List, Dict, Iterable, Tuple
 from agglomerate.agglomerate_3d import Agglomerate3D, TREE_SCORE_OPTIONS
 from itertools import product
+from data.data_loader import DataLoader
 import multiprocessing as mp
 import pandas as pd
 import numpy as np
@@ -59,7 +60,7 @@ class BatchAgglomerate3D:
         self.agglomerators.append(result)
         self.pbar.update(1)
 
-    def agglomerate(self, data: pd.DataFrame):
+    def agglomerate(self, data_ct: DataLoader):
         pool = mp.Pool(mp.cpu_count())
         for lc, lr, cta, ra, mrd, rds in product(self.linkage_cell,
                                                  self.linkage_region,
@@ -70,7 +71,7 @@ class BatchAgglomerate3D:
             if self.verbose:
                 print(f'Starting agglomeration with {lc, lr, cta, ra, mrd, rds, self.integrity_check}')
             pool.apply_async(self._agglomerate_func,
-                             args=(lc, lr, cta, ra, mrd, rds, self.integrity_check, data),
+                             args=(lc, lr, cta, ra, mrd, rds, self.integrity_check, data_ct),
                              callback=self._collect_agglomerators)
         pool.close()
         pool.join()
