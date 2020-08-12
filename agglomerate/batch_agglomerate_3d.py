@@ -12,12 +12,14 @@ class BatchAgglomerate3D:
                  linkage_cell: List[str],
                  linkage_region: List[str],
                  cell_type_affinity: List[Callable],
-                 region_affinity: Optional[Callable],
+                 region_affinity: Optional[List[Callable]] = None,
                  max_region_diff: Optional[List[int]] = None,
                  region_dist_scale: Optional[Iterable[float]] = None,
                  verbose: Optional[bool] = False,
                  integrity_check: Optional[bool] = True):
         # Can't have mutable types as default :(
+        if region_affinity is None:
+            region_affinity = [None]
         if region_dist_scale is None:
             region_dist_scale = [1]
         if max_region_diff is None:
@@ -35,14 +37,15 @@ class BatchAgglomerate3D:
         self.tree_scores: Dict[str, List[float]] = {metric: [] for metric in TREE_SCORE_OPTIONS}
         self.pbar = \
             tqdm(total=np.product(list(map(len, [
-                cell_type_affinity, linkage_cell, linkage_region, max_region_diff, region_dist_scale
+                linkage_cell, linkage_region, cell_type_affinity, region_affinity, max_region_diff, region_dist_scale
             ]))))
 
     @staticmethod
-    def _agglomerate_func(cta, lc, lr, mrd, rds, ic, data):
+    def _agglomerate_func(lc, lr, cta, ra, mrd, rds, ic, data):
         agglomerate = Agglomerate3D(linkage_cell=lc,
                                     linkage_region=lr,
                                     cell_type_affinity=cta,
+                                    region_affinity=ra,
                                     max_region_diff=mrd,
                                     region_dist_scale=rds,
                                     verbose=False,
@@ -58,15 +61,16 @@ class BatchAgglomerate3D:
 
     def agglomerate(self, data: pd.DataFrame):
         pool = mp.Pool(mp.cpu_count())
-        for lc, lr, cta, mrd, rds in product(self.linkage_cell,
-                                             self.linkage_region,
-                                             self.cell_type_affinity,
-                                             self.max_region_diff,
-                                             self.region_dist_scale):
+        for lc, lr, cta, ra, mrd, rds in product(self.linkage_cell,
+                                                 self.linkage_region,
+                                                 self.cell_type_affinity,
+                                                 self.region_affinity,
+                                                 self.max_region_diff,
+                                                 self.region_dist_scale):
             if self.verbose:
-                print(f'Starting agglomeration with {cta, lc, lr, mrd, rds, self.integrity_check}')
+                print(f'Starting agglomeration with {lc, lr, cta, ra, mrd, rds, self.integrity_check}')
             pool.apply_async(self._agglomerate_func,
-                             args=(lc, lr, cta, mrd, rds, self.integrity_check, data),
+                             args=(lc, lr, cta, ra, mrd, rds, self.integrity_check, data),
                              callback=self._collect_agglomerators)
         pool.close()
         pool.join()
@@ -99,7 +103,7 @@ class BatchAgglomerate3D:
             pool.apply_async(func=func,
                              args=(a,),
                              callback=callback
-                             )
+                             ).get()
         pool.close()
         pool.join()
         self.pbar.close()
@@ -111,6 +115,7 @@ class BatchAgglomerate3D:
 
     @staticmethod
     def _basic_score_func(a: Agglomerate3D) -> List[float]:
+        print('Computing tree scores')
         return [a.compute_tree_score(m) for m in TREE_SCORE_OPTIONS]
 
     def get_best_agglomerators(self) -> Dict[str, Tuple[float, np.array]]:

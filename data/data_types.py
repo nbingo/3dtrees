@@ -1,6 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Dict, Optional, Union, Callable, ClassVar
+from typing import Dict, Optional, Union, Callable
 from abc import ABC, abstractmethod
 from itertools import product
 import functools
@@ -10,8 +10,6 @@ import numpy as np
 @dataclass
 class Mergeable(ABC):
     id_num: int
-    affinity: ClassVar[Callable]
-    linkage: ClassVar[str]
 
     @property
     @abstractmethod
@@ -28,9 +26,10 @@ class Mergeable(ABC):
     def transcriptome(self):
         pass
 
-    @classmethod
+    @staticmethod
     @abstractmethod
-    def diff(cls, lhs: Mergeable, rhs: Mergeable):
+    def diff(lhs: Mergeable, rhs: Mergeable, affinity: Callable, linkage: str,
+             affinity2: Optional[Callable] = None, linkage2: Optional[str] = None):
         pass
 
 
@@ -58,17 +57,18 @@ class CellType(Mergeable):
         self._region = r
 
     # noinspection PyArgumentList
-    @classmethod
-    def diff(cls, lhs: CellType, rhs: CellType):
+    @staticmethod
+    def diff(lhs: CellType, rhs: CellType, affinity: Callable, linkage: str,
+             affinity2: Optional[Callable] = None, linkage2: Optional[str] = None):
         dists = np.zeros((lhs.num_original, rhs.num_original))
         # Compute distance matrix
         # essentially only useful if this is working on merged cell types
         # otherwise just produces a matrix containing one value
         for ct1_idx, ct2_idx in product(range(lhs.num_original), range(rhs.num_original)):
-            dists[ct1_idx, ct2_idx] = cls.affinity(lhs.transcriptome[ct1_idx], rhs.transcriptome[ct2_idx])
-        if cls.linkage == 'single':
+            dists[ct1_idx, ct2_idx] = affinity(lhs.transcriptome[ct1_idx], rhs.transcriptome[ct2_idx])
+        if linkage == 'single':
             dist = dists.min()
-        elif cls.linkage == 'complete':
+        elif linkage == 'complete':
             dist = dists.max()
         else:  # default to 'average'
             dist = dists.mean()
@@ -106,19 +106,23 @@ class Region(Mergeable):
         return self.id_num
 
     # noinspection PyArgumentList
-    @classmethod
-    def diff(cls, lhs: Region, rhs: Region):
+    @staticmethod
+    def diff(lhs: Region, rhs: Region, affinity: Callable, linkage: str,
+             affinity2: Optional[Callable] = None, linkage2: Optional[str] = None):
+        if (affinity2 is None) or (linkage2 is None):
+            raise TypeError('Both affinity and linkage must be defined for cell types')
         ct_dists = np.zeros((lhs.num_cell_types, rhs.num_cell_types))
         r1_ct_list = list(lhs.cell_types.values())
         r2_ct_list = list(rhs.cell_types.values())
         for r1_idx, r2_idx in product(range(lhs.num_cell_types), range(rhs.num_cell_types)):
-            ct_dists[r1_idx, r2_idx] = CellType.diff(r1_ct_list[r1_idx], r2_ct_list[r2_idx])
+            ct_dists[r1_idx, r2_idx] = CellType.diff(r1_ct_list[r1_idx], r2_ct_list[r2_idx],
+                                                     affinity=affinity2, linkage=linkage2)
 
-        if cls.linkage == 'single':
+        if linkage == 'single':
             dist = ct_dists.min()
-        elif cls.linkage == 'complete':
+        elif linkage == 'complete':
             dist = ct_dists.max()
-        elif cls.linkage == 'homolog_avg':
+        elif linkage == 'homolog_avg':
             dists = []
             for i in range(np.min(ct_dists.shape)):
                 # Add the distance between the two closest cell types (can consider as homologs)

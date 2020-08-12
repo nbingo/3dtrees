@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 
 if __name__ == '__main__':
-    data = read_data(['chicken', 'mouse'], ['chicken', 'mouse'], orthologs=True)
+    data = read_data(['mouse'], ['mouse'], orthologs=True)
     agglomerate = BatchAgglomerate3D(
         linkage_cell=['complete'],
         linkage_region=['homolog_avg'],
