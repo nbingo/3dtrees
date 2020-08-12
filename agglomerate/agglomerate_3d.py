@@ -1,6 +1,6 @@
 from typing import List, Callable, Tuple, Optional, Dict, Union
 from queue import PriorityQueue
-from data.data_loader import get_region
+from data.data_loader import DataLoader
 from itertools import combinations, product
 from data.data_types import Region, CellType, Edge, Mergeable
 from tqdm import tqdm
@@ -433,19 +433,18 @@ class Agglomerate3D:
 
         return lm
 
-    def agglomerate(self, data: pd.DataFrame) -> pd.DataFrame:
-        self.ct_names = data.index.values
-        ct_regions = np.vectorize(get_region)(self.ct_names)
+    def agglomerate(self, data_ct: DataLoader, data_r: Optional[DataLoader] = None) -> pd.DataFrame:
+        self.ct_names = data_ct.get_names()
+        ct_regions = data_ct.get_corresponding_region_names()
         self.r_names = np.unique(ct_regions)
         region_to_id: Dict[str, int] = {self.r_names[i]: i for i in range(len(self.r_names))}
 
         # Building initial regions and cell types
         self.regions = {r: Region(r) for r in range(len(self.r_names))}
-        data_plain = data.to_numpy()
 
-        for c in range(len(self.ct_names)):
+        for c in range(len(data_ct)):
             r_id = region_to_id[ct_regions[c]]
-            self.orig_cell_types[c] = CellType(c, r_id, data_plain[c])
+            self.orig_cell_types[c] = CellType(c, r_id, data_ct[c])
             self.regions[r_id].cell_types[c] = self.orig_cell_types[c]
         self.cell_types = self.orig_cell_types.copy()
 

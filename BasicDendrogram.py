@@ -39,7 +39,7 @@ if __name__ == '__main__':
 
 
     def spearmanr_connectivity(x):
-        # data is assumed to be (n_variables, n_examples)
+        # data_ct is assumed to be (n_variables, n_examples)
         rho, _ = spearmanr(x, axis=1)
         return 1 - rho
 

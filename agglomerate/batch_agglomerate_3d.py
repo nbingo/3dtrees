@@ -103,7 +103,7 @@ class BatchAgglomerate3D:
             pool.apply_async(func=func,
                              args=(a,),
                              callback=callback
-                             ).get()
+                             )
         pool.close()
         pool.join()
         self.pbar.close()
