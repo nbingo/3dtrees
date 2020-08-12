@@ -115,7 +115,6 @@ class BatchAgglomerate3D:
 
     @staticmethod
     def _basic_score_func(a: Agglomerate3D) -> List[float]:
-        print('Computing tree scores')
         return [a.compute_tree_score(m) for m in TREE_SCORE_OPTIONS]
 
     def get_best_agglomerators(self) -> Dict[str, Tuple[float, np.array]]:
