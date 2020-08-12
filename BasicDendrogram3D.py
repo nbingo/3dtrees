@@ -71,14 +71,14 @@ class CTDataLoader(DataLoader):
 
 
 if __name__ == '__main__':
-    ct_data_loader = CTDataLoader(['chicken', 'mouse'], ['chicken', 'mouse'], orthologs=False)
+    ct_data_loader = CTDataLoader(['mouse'], ['mouse'], orthologs=False)
 
     agglomerate = Agglomerate3D(
         cell_type_affinity=spearmanr_connectivity,
         linkage_cell='complete',
         linkage_region='homolog_avg',
         max_region_diff=1,
-        region_dist_scale=.8,
+        region_dist_scale=.765,
         verbose=False,
         pbar=True,
         integrity_check=True
