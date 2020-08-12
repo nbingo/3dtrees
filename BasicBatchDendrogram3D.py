@@ -1,11 +1,11 @@
 from agglomerate.batch_agglomerate_3d import BatchAgglomerate3D
-from data.data_loader import read_data
+from BasicDendrogram3D import CTDataLoader
 from metrics.metric_utils import spearmanr_connectivity
 import pandas as pd
 import numpy as np
 
 if __name__ == '__main__':
-    data = read_data(['mouse'], ['mouse'], orthologs=True)
+    data = CTDataLoader(['mouse'], ['mouse'], orthologs=True)
     agglomerate = BatchAgglomerate3D(
         linkage_cell=['complete'],
         linkage_region=['homolog_avg'],
