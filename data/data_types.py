@@ -26,6 +26,26 @@ class Mergeable(ABC):
     def transcriptome(self):
         pass
 
+    # noinspection PyArgumentList
+    @staticmethod
+    def _pairwise_diff(lhs_transcriptome: np.array, rhs_transcriptome: np.array, affinity: Callable, linkage: str):
+        lhs_len = lhs_transcriptome.shape[0]
+        rhs_len = rhs_transcriptome.shape[0]
+        dists = np.zeros((lhs_len, rhs_len))
+        # Compute distance matrix
+        # essentially only useful if this is working on merged cell types
+        # otherwise just produces a matrix containing one value
+        for ct1_idx, ct2_idx in product(range(lhs_len), range(rhs_len)):
+            dists[ct1_idx, ct2_idx] = affinity(lhs_transcriptome[ct1_idx], rhs_transcriptome[ct2_idx])
+        if linkage == 'single':
+            dist = dists.min()
+        elif linkage == 'complete':
+            dist = dists.max()
+        else:  # default to 'average'
+            dist = dists.mean()
+
+        return dist
+
     @staticmethod
     @abstractmethod
     def diff(lhs: Mergeable, rhs: Mergeable, affinity: Callable, linkage: str,
@@ -56,24 +76,10 @@ class CellType(Mergeable):
     def region(self, r: int):
         self._region = r
 
-    # noinspection PyArgumentList
     @staticmethod
     def diff(lhs: CellType, rhs: CellType, affinity: Callable, linkage: str,
              affinity2: Optional[Callable] = None, linkage2: Optional[str] = None):
-        dists = np.zeros((lhs.num_original, rhs.num_original))
-        # Compute distance matrix
-        # essentially only useful if this is working on merged cell types
-        # otherwise just produces a matrix containing one value
-        for ct1_idx, ct2_idx in product(range(lhs.num_original), range(rhs.num_original)):
-            dists[ct1_idx, ct2_idx] = affinity(lhs.transcriptome[ct1_idx], rhs.transcriptome[ct2_idx])
-        if linkage == 'single':
-            dist = dists.min()
-        elif linkage == 'complete':
-            dist = dists.max()
-        else:  # default to 'average'
-            dist = dists.mean()
-
-        return np.float64(dist)
+        return CellType._pairwise_diff(lhs.transcriptome, rhs.transcriptome, affinity, linkage)
 
     def __repr__(self):
         return f'{self.region}.{self.id_num}'
@@ -82,9 +88,18 @@ class CellType(Mergeable):
 @dataclass
 class Region(Mergeable):
     cell_types: Optional[Dict[int, CellType]] = field(default_factory=dict)
+    _transcriptome: Optional[np.array] = None
 
     @property
     def transcriptome(self) -> np.array:
+        if self._transcriptome is None:
+            raise ValueError(f'Transcriptome for region {self.id_num} never defined.')
+        if len(self._transcriptome.shape) == 1:
+            return self._transcriptome.reshape(1, -1)
+        return self._transcriptome
+
+    @property
+    def child_transcriptomes(self) -> np.array:
         # ugly -- should refactor something
         ct_list = list(self.cell_types.values())
         transcriptome_length = ct_list[0].transcriptome.shape[1]
@@ -95,7 +110,10 @@ class Region(Mergeable):
 
     @property
     def num_original(self):
-        return np.sum([ct.num_original for ct in self.cell_types.values()])
+        if self._transcriptome is None:
+            return np.sum([ct.num_original for ct in self.cell_types.values()])
+        else:
+            return self.transcriptome.shape[0]
 
     @property
     def num_cell_types(self):
@@ -109,33 +127,36 @@ class Region(Mergeable):
     @staticmethod
     def diff(lhs: Region, rhs: Region, affinity: Callable, linkage: str,
              affinity2: Optional[Callable] = None, linkage2: Optional[str] = None):
-        if (affinity2 is None) or (linkage2 is None):
-            raise TypeError('Both affinity and linkage must be defined for cell types')
-        ct_dists = np.zeros((lhs.num_cell_types, rhs.num_cell_types))
-        r1_ct_list = list(lhs.cell_types.values())
-        r2_ct_list = list(rhs.cell_types.values())
-        for r1_idx, r2_idx in product(range(lhs.num_cell_types), range(rhs.num_cell_types)):
-            ct_dists[r1_idx, r2_idx] = CellType.diff(r1_ct_list[r1_idx], r2_ct_list[r2_idx],
-                                                     affinity=affinity2, linkage=linkage2)
+        if (lhs._transcriptome is None) or (rhs._transcriptome is None):
+            if (affinity2 is None) or (linkage2 is None):
+                raise TypeError('Both affinity and linkage must be defined for cell types')
+            ct_dists = np.zeros((lhs.num_cell_types, rhs.num_cell_types))
+            r1_ct_list = list(lhs.cell_types.values())
+            r2_ct_list = list(rhs.cell_types.values())
+            for r1_idx, r2_idx in product(range(lhs.num_cell_types), range(rhs.num_cell_types)):
+                ct_dists[r1_idx, r2_idx] = CellType.diff(r1_ct_list[r1_idx], r2_ct_list[r2_idx],
+                                                         affinity=affinity2, linkage=linkage2)
 
-        if linkage == 'single':
-            dist = ct_dists.min()
-        elif linkage == 'complete':
-            dist = ct_dists.max()
-        elif linkage == 'homolog_avg':
-            dists = []
-            for i in range(np.min(ct_dists.shape)):
-                # Add the distance between the two closest cell types (can consider as homologs)
-                dists.append(ct_dists.min())
-                # Delete these two homologs from the distance matrix
-                ct_min1_idx, ct_min2_idx = np.unravel_index(np.argmin(ct_dists), ct_dists.shape)
-                ct_dists = np.delete(ct_dists, ct_min1_idx, axis=0)
-                ct_dists = np.delete(ct_dists, ct_min2_idx, axis=1)
-            dist = np.mean(dists)
-        else:  # default to 'average':
-            dist = ct_dists.mean()
+            if linkage == 'single':
+                dist = ct_dists.min()
+            elif linkage == 'complete':
+                dist = ct_dists.max()
+            elif linkage == 'homolog_avg':
+                dists = []
+                for i in range(np.min(ct_dists.shape)):
+                    # Add the distance between the two closest cell types (can consider as homologs)
+                    dists.append(ct_dists.min())
+                    # Delete these two homologs from the distance matrix
+                    ct_min1_idx, ct_min2_idx = np.unravel_index(np.argmin(ct_dists), ct_dists.shape)
+                    ct_dists = np.delete(ct_dists, ct_min1_idx, axis=0)
+                    ct_dists = np.delete(ct_dists, ct_min2_idx, axis=1)
+                dist = np.mean(dists)
+            else:  # default to 'average':
+                dist = ct_dists.mean()
 
-        return dist
+            return dist
+        else:
+            return Region._pairwise_diff(lhs.transcriptome, rhs.transcriptome, affinity, linkage)
 
     def __repr__(self):
         return f'{self.id_num}{list(self.cell_types.values())}'

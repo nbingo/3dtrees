@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 
 if __name__ == '__main__':
-    data = CTDataLoader(['mouse'], ['mouse'], orthologs=True)
+    data = CTDataLoader(['mouse'], ['mouse'], orthologs=False)
     agglomerate = BatchAgglomerate3D(
         linkage_cell=['complete'],
         linkage_region=['homolog_avg'],
