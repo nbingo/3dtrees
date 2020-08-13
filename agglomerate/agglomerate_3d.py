@@ -436,11 +436,16 @@ class Agglomerate3D:
     def agglomerate(self, data_ct: DataLoader, data_r: Optional[DataLoader] = None) -> pd.DataFrame:
         self.ct_names = data_ct.get_names()
         ct_regions = data_ct.get_corresponding_region_names()
-        self.r_names = np.unique(ct_regions)
-        region_to_id: Dict[str, int] = {self.r_names[i]: i for i in range(len(self.r_names))}
 
         # Building initial regions and cell types
-        self.regions = {r: Region(r) for r in range(len(self.r_names))}
+        if data_r is None:
+            self.r_names = np.unique(ct_regions)
+            self.regions = {r: Region(r) for r in range(len(self.r_names))}
+        else:
+            self.r_names = data_r.get_names()
+            self.regions = {r: Region(r, _transcriptome=data_r[r]) for r in range(len(self.r_names))}
+
+        region_to_id: Dict[str, int] = {self.r_names[i]: i for i in range(len(self.r_names))}
 
         for c in range(len(data_ct)):
             r_id = region_to_id[ct_regions[c]]
