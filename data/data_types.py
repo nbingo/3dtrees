@@ -1,6 +1,6 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
-from typing import Dict, Optional, Union, Callable
+from typing import Dict, Optional, Union, Callable, Sequence
 from abc import ABC, abstractmethod
 from itertools import product
 import functools
@@ -26,10 +26,10 @@ class Mergeable(ABC):
     def transcriptome(self) -> np.array:
         pass
 
-    @classmethod
-    @abstractmethod
-    def merge(cls, m1: Mergeable, m2: Mergeable, dist: float, new_id: int, region_id: Optional[int] = None) -> Mergeable:
-        pass
+    # @classmethod
+    # @abstractmethod
+    # def merge(cls, m1: Mergeable, m2: Mergeable, dist: float, new_id: int, region_id: Optional[int] = None) -> Mergeable:
+    #     pass
 
     # noinspection PyArgumentList
     @staticmethod
@@ -55,7 +55,8 @@ class Mergeable(ABC):
     @staticmethod
     @abstractmethod
     def diff(lhs: Mergeable, rhs: Mergeable, affinity: Callable, linkage: str,
-             affinity2: Optional[Callable] = None, linkage2: Optional[str] = None):
+             affinity2: Optional[Callable] = None, linkage2: Optional[str] = None,
+             mask: Optional[Sequence] = None):
         pass
 
 
@@ -83,7 +84,7 @@ class CellType(Mergeable):
         self._region = r
 
     @classmethod
-    def merge(cls, m1: CellType, m2: CellType, dist: float, new_id: int, region_id: Optional[int] = None) -> CellType:
+    def merge(cls, m1: CellType, m2: CellType, new_id: int, region_id: Optional[int] = None) -> CellType:
         # must be in same region if not being created into a new region
         if region_id is None:
             assert m1.region == m2.region, \
@@ -93,8 +94,11 @@ class CellType(Mergeable):
 
     @staticmethod
     def diff(lhs: CellType, rhs: CellType, affinity: Callable, linkage: str,
-             affinity2: Optional[Callable] = None, linkage2: Optional[str] = None):
-        return CellType._pairwise_diff(lhs.transcriptome, rhs.transcriptome, affinity, linkage)
+             affinity2: Optional[Callable] = None, linkage2: Optional[str] = None,
+             mask: Optional[Sequence] = None):
+        lt = lhs.transcriptome if mask is None else lhs.transcriptome[:, mask]
+        rt = rhs.transcriptome if mask is None else rhs.transcriptome[:, mask]
+        return CellType._pairwise_diff(lt, rt, affinity, linkage)
 
     def __repr__(self):
         return f'{self.region}.{self.id_num}'
@@ -138,14 +142,15 @@ class Region(Mergeable):
     def region(self):
         return self.id_num
 
-    @classmethod
-    def merge(cls, m1: Region, m2: Region, dist: float, new_id: int, region_id: Optional[int] = None) -> Region:
-        pass
+    # @classmethod
+    # def merge(cls, m1: Region, m2: Region, dist: float, new_id: int, region_id: Optional[int] = None) -> Region:
+    #     pass
 
     # noinspection PyArgumentList
     @staticmethod
     def diff(lhs: Region, rhs: Region, affinity: Callable, linkage: str,
-             affinity2: Optional[Callable] = None, linkage2: Optional[str] = None):
+             affinity2: Optional[Callable] = None, linkage2: Optional[str] = None,
+             mask: Optional[np.array] = None):
         if (lhs._transcriptome is None) or (rhs._transcriptome is None):
             if (affinity2 is None) or (linkage2 is None):
                 raise TypeError('Both affinity and linkage must be defined for cell types')
@@ -154,7 +159,7 @@ class Region(Mergeable):
             r2_ct_list = list(rhs.cell_types.values())
             for r1_idx, r2_idx in product(range(lhs.num_cell_types), range(rhs.num_cell_types)):
                 ct_dists[r1_idx, r2_idx] = CellType.diff(r1_ct_list[r1_idx], r2_ct_list[r2_idx],
-                                                         affinity=affinity2, linkage=linkage2)
+                                                         affinity=affinity2, linkage=linkage2, mask=mask)
 
             if linkage == 'single':
                 dist = ct_dists.min()

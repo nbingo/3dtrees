@@ -13,11 +13,9 @@ AVG_LOG_FC_THRESH = 2
 
 class CTDataLoader(DataLoader):
 
-    def __init__(self, species: List[str],
-                 deg_species: Optional[List[str]] = None,
-                 orthologs: Optional[bool] = True,
-                 preprocess: Optional[bool] = True
-                 ):
+    def __init__(self, species: List[str], deg_species: Optional[List[str]] = None, orthologs: Optional[bool] = True,
+                 preprocess: Optional[bool] = True):
+        super().__init__()
         if deg_species is None:
             deg_species = species
         if orthologs:
