@@ -13,22 +13,28 @@ class Mergeable(ABC):
 
     @property
     @abstractmethod
-    def num_original(self):
+    def num_original(self) -> int:
         pass
 
     @property
     @abstractmethod
-    def region(self):
+    def region(self) -> int:
         pass
 
     @property
     @abstractmethod
-    def transcriptome(self):
+    def transcriptome(self) -> np.array:
+        pass
+
+    @classmethod
+    @abstractmethod
+    def merge(cls, m1: Mergeable, m2: Mergeable, dist: float, new_id: int, region_id: Optional[int] = None) -> Mergeable:
         pass
 
     # noinspection PyArgumentList
     @staticmethod
-    def _pairwise_diff(lhs_transcriptome: np.array, rhs_transcriptome: np.array, affinity: Callable, linkage: str):
+    def _pairwise_diff(lhs_transcriptome: np.array, rhs_transcriptome: np.array,
+                       affinity: Callable, linkage: str) -> float:
         lhs_len = lhs_transcriptome.shape[0]
         rhs_len = rhs_transcriptome.shape[0]
         dists = np.zeros((lhs_len, rhs_len))
@@ -76,6 +82,15 @@ class CellType(Mergeable):
     def region(self, r: int):
         self._region = r
 
+    @classmethod
+    def merge(cls, m1: CellType, m2: CellType, dist: float, new_id: int, region_id: Optional[int] = None) -> CellType:
+        # must be in same region if not being created into a new region
+        if region_id is None:
+            assert m1.region == m2.region, \
+                'Tried merging cell types from different regions without new target region.'
+            region_id = m1.region
+        return cls(new_id, region_id, np.row_stack((m1.transcriptome, m2.transcriptome)))
+
     @staticmethod
     def diff(lhs: CellType, rhs: CellType, affinity: Callable, linkage: str,
              affinity2: Optional[Callable] = None, linkage2: Optional[str] = None):
@@ -122,6 +137,10 @@ class Region(Mergeable):
     @property
     def region(self):
         return self.id_num
+
+    @classmethod
+    def merge(cls, m1: Region, m2: Region, dist: float, new_id: int, region_id: Optional[int] = None) -> Region:
+        pass
 
     # noinspection PyArgumentList
     @staticmethod

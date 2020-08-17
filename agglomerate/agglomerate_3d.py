@@ -285,17 +285,10 @@ class Agglomerate3D:
             return self._compute_bme_score()
 
     def _merge_cell_types(self, ct1: CellType, ct2: CellType, ct_dist: float, region_id: Optional[int] = None):
-        # must be in same region if not being created into a new region
-        if region_id is None:
-            assert ct1.region == ct2.region, \
-                'Tried merging cell types from different regions without new target region.'
-            region_id = ct1.region
-
         # Create new cell type and assign to region
-        self.cell_types[self.ct_id_idx] = CellType(self.ct_id_idx,
-                                                   region_id,
-                                                   np.row_stack((ct1.transcriptome, ct2.transcriptome)))
-        self.regions[region_id].cell_types[self.ct_id_idx] = self.cell_types[self.ct_id_idx]
+        new_ct = CellType.merge(ct1, ct2, ct_dist, self.ct_id_idx, region_id)
+        self.cell_types[self.ct_id_idx] = new_ct
+        self.regions[new_ct.region].cell_types[new_ct.id_num] = new_ct
 
         self._record_link(ct1, ct2, self.cell_types[self.ct_id_idx], ct_dist)
 
