@@ -374,7 +374,8 @@ class Agglomerate3D:
 
         if self.verbose:
             print(f'Merged regions {r1} and {r2} with distance {r_dist} to form '
-                  f'{self.regions[self._r_id_idx]} with {self.regions[self._r_id_idx].num_original} original data points.'
+                  f'{self.regions[self._r_id_idx]} with '
+                  f'{self.regions[self._r_id_idx].num_original} original data points.'
                   f'\nNew region dict: {self.regions}\n}}\n')
 
         self._r_id_idx += 1

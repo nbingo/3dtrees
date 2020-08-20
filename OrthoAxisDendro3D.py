@@ -1,13 +1,15 @@
 from agglomerate.agglomerate_3d import Agglomerate3D
 from data.data_loader import DataLoader
 from metrics.metric_utils import spearmanr_connectivity
-from typing import Optional, List
+from typing import List, Optional
 import numpy as np
 import pandas as pd
 import time
 import scanpy as sc
+import os
+import pickle
 
-sc.settings.verbosity = 3  # Please tell me everything all the time
+sc.settings.verbosity = 0  # Please tell me everything all the time
 
 P_VAL_ADJ_THRESH = 0.01
 AVG_LOG_FC_THRESH = 2
@@ -15,9 +17,22 @@ AVG_LOG_FC_THRESH = 2
 
 class CTDataLoader(DataLoader):
 
-    def __init__(self, species: str):
+    def __init__(self, species: str, reprocess: Optional[bool] = False):
         super().__init__()
-        species_data = sc.read(f'withcolors/{species}_ex_colors.h5ad')
+
+        filename = f'{species}_ex_colors'
+
+        # Used saved data if possible
+        if not reprocess and os.path.exists(f'withcolors_preprocessed/{filename}.pickle'):
+            with open(f'withcolors_preprocessed/{filename}.pickle', mode='rb') as file:
+                data_dict = pickle.load(file)
+                self.data = data_dict['data']
+                self.ct_axis_mask = data_dict['ct_axis_mask']
+                self.r_axis_mask = data_dict['r_axis_mask']
+                # No need to do anything else
+                return
+
+        species_data = sc.read(f'withcolors/{filename}.h5ad')
 
         # Label each observation with its region and species
         species_data.obs['clusters'] = species_data.obs['clusters'].apply(lambda s: species[0].upper() + '_' + s)
@@ -48,7 +63,8 @@ class CTDataLoader(DataLoader):
                 # Compute DEGs for cell types in this region
                 sc.tl.rank_genes_groups(sr, groupby='clusters', method='wilcoxon')
                 # Filter by adjusted p value and log fold change
-                deg_names_mask = ((pd.DataFrame(sr.uns['rank_genes_groups']['pvals_adj']) < P_VAL_ADJ_THRESH) & (pd.DataFrame(sr.uns['rank_genes_groups']['logfoldchanges']) > AVG_LOG_FC_THRESH))
+                deg_names_mask = ((pd.DataFrame(sr.uns['rank_genes_groups']['pvals_adj']) < P_VAL_ADJ_THRESH) &
+                                  (pd.DataFrame(sr.uns['rank_genes_groups']['logfoldchanges']) > AVG_LOG_FC_THRESH))
                 # Get the names
                 ct_degs_by_subregion.append(pd.DataFrame(sr.uns['rank_genes_groups']['names'])[deg_names_mask])
 
@@ -60,6 +76,11 @@ class CTDataLoader(DataLoader):
         # Now go through genes in their original order and check if they are in our list of genes
         self.ct_axis_mask = species_data.var.index.isin(ct_axis_filtered_names)
 
+        # If a gene appears in both the region and cell type masks, then give it to the region
+        # because at least one region is identified by it
+        # So essentially set all values of self.ct_axis_mask to False where self.r_axis_mask is True
+        self.ct_axis_mask[self.r_axis_mask] = False
+
         # Average transcriptomes within each cell type and put into data frame with cell types as rows and genes as cols
         ct_names = np.unique(species_data.obs['clusters'])
         ct_avg_data = [species_data[species_data.obs['clusters'] == ct].X.mean(axis=0) for ct in ct_names]
@@ -68,7 +89,12 @@ class CTDataLoader(DataLoader):
         # Divide each row by mean, as in Tosches et al, rename columns,
         # and transpose so that column labels are genes and rows are cell types
         # Divide each row by mean
-        self.data = self.data.div(self.data.mean(axis=0).values, axis=1)
+        self.data = self.data.div(self.data.mean(axis=0).to_numpy(), axis=1)
+
+        # Save data
+        data_dict = {'data': self.data, 'ct_axis_mask': self.ct_axis_mask, 'r_axis_mask': self.r_axis_mask}
+        with open(f'withcolors_preprocessed/{filename}.pickle', mode='wb') as file:
+            pickle.dump(data_dict, file)
 
     def get_names(self) -> List[str]:
         return self.data.index.values
@@ -87,14 +113,14 @@ class CTDataLoader(DataLoader):
 
 
 if __name__ == '__main__':
-    ct_data_loader = CTDataLoader('mouse')
+    ct_data_loader = CTDataLoader('mouse', reprocess=False)
 
     agglomerate = Agglomerate3D(
         cell_type_affinity=spearmanr_connectivity,
         linkage_cell='complete',
         linkage_region='homolog_avg',
         max_region_diff=1,
-        region_dist_scale=.5,
+        region_dist_scale=.7,
         verbose=False,
         pbar=True,
         integrity_check=True
