@@ -6,13 +6,15 @@ import numpy as np
 import pandas as pd
 import time
 import scanpy as sc
+from scipy import stats
 import os
 import pickle
 
-sc.settings.verbosity = 0  # Please tell me everything all the time
+sc.settings.verbosity = 4  # Please tell me everything all the time
 
 P_VAL_ADJ_THRESH = 0.01
 AVG_LOG_FC_THRESH = 2
+GENE_CORR_THRESH = 0.9
 
 
 class CTDataLoader(DataLoader):
@@ -76,10 +78,32 @@ class CTDataLoader(DataLoader):
         # Now go through genes in their original order and check if they are in our list of genes
         self.ct_axis_mask = species_data.var.index.isin(ct_axis_filtered_names)
 
-        # If a gene appears in both the region and cell type masks, then give it to the region
-        # because at least one region is identified by it
-        # So essentially set all values of self.ct_axis_mask to False where self.r_axis_mask is True
-        self.ct_axis_mask[self.r_axis_mask] = False
+        # Find correlated genes between ct_axis_mask and r_axis_mask and remove them from both
+        # First remove genes that appear in both masks since they must contain both ct and region information
+        intersect_mask = self.r_axis_mask & self.ct_axis_mask
+        self.r_axis_mask[intersect_mask] = False
+        self.ct_axis_mask[intersect_mask] = False
+        # Get raw expression data for leftover relevant ct and region genes
+        r_genes_raw = species_data.X[:, self.r_axis_mask].toarray()
+        ct_genes_raw = species_data.X[:, self.ct_axis_mask].toarray()
+        # Compute correlation coefficient between all genes. Unfortunately can't just do all ct to all region
+        # and will have to only select those later
+        # Should result in a (len(r_genes_raw) + len(ct_genes_raw)) side square matrix
+        corrcoefs = stats.spearmanr(r_genes_raw, ct_genes_raw).correlation
+        # Threshold the correlations by magnitude, since a negative correlation is still information
+        corrcoefs_significant = np.abs(corrcoefs) > GENE_CORR_THRESH
+        # Find any ct genes that are correlated to a region gene or vice-versa
+        # ct genes that are correlated to some region gene
+        num_r_genes = r_genes_raw.shape[1]
+        ct_corr_genes = corrcoefs_significant[num_r_genes:, :num_r_genes].any(axis=1)
+        # region genes that are correlated to some cell type gene
+        r_corr_genes = corrcoefs_significant[:num_r_genes, num_r_genes:].any(axis=1)
+        # Convert the masks to indices to correctly remove correlated regions from them
+        r_axis_mask_indices = np.where(self.r_axis_mask)[0]
+        ct_axis_mask_indices = np.where(self.ct_axis_mask)[0]
+        # Remove correlated genes
+        self.r_axis_mask[r_axis_mask_indices[r_corr_genes]] = False
+        self.ct_axis_mask[ct_axis_mask_indices[ct_corr_genes]] = False
 
         # Average transcriptomes within each cell type and put into data frame with cell types as rows and genes as cols
         ct_names = np.unique(species_data.obs['clusters'])
@@ -113,7 +137,7 @@ class CTDataLoader(DataLoader):
 
 
 if __name__ == '__main__':
-    ct_data_loader = CTDataLoader('mouse', reprocess=False)
+    ct_data_loader = CTDataLoader('chicken', reprocess=True)
 
     agglomerate = Agglomerate3D(
         cell_type_affinity=spearmanr_connectivity,
