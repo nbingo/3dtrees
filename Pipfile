@@ -13,6 +13,8 @@ sklearn = "*"
 pandas = "*"
 tqdm = "*"
 seaborn = "*"
+sphinx = "*"
+scanpy = "*"
 
 [requires]
 python_version = "3.7"
