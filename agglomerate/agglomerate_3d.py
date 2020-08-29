@@ -193,7 +193,9 @@ class Agglomerate3D:
         ax.set_zlim(z.min(), z.max())
         ax.set_xlim(x.min(), x.max())
         ax.set_ylim(y.min(), y.max())
-        ax.set(xlabel='Cell type', ylabel='Region', zlabel='Distance')
+        ax.set_xlabel('Cell type', fontsize=20)
+        ax.set_ylabel('Region', fontsize=20)
+        ax.set_zlabel('Distance', fontsize=20)
         for line, color in zip(segments, colors):
             ax.plot(line[:, 0], line[:, 1], line[:, 2], color=color, lw=2)
         plt.show()
