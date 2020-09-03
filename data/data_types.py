@@ -6,6 +6,8 @@ from itertools import product
 import functools
 import numpy as np
 
+LINKAGE_CELL_OPTIONS = ['single', 'complete', 'average']
+LINKAGE_REGION_OPTIONS = ['single', 'complete', 'average', 'homolog_avg', 'homolog_mnn']
 
 @dataclass
 class Mergeable(ABC):
@@ -151,9 +153,12 @@ class Region(Mergeable):
     def diff(lhs: Region, rhs: Region, affinity: Callable, linkage: str,
              affinity2: Optional[Callable] = None, linkage2: Optional[str] = None,
              mask: Optional[np.array] = None):
+        # Difference in number of cell types contained. Only really matters for homolog_mnn since it can change there
+        num_ct_diff = np.abs(lhs.num_cell_types - rhs.num_cell_types)
+
         if (lhs._transcriptome is None) or (rhs._transcriptome is None):
             if (affinity2 is None) or (linkage2 is None):
-                raise TypeError('Both affinity and linkage must be defined for cell types')
+                raise ValueError('Both affinity and linkage must be defined for cell types')
             ct_dists = np.zeros((lhs.num_cell_types, rhs.num_cell_types))
             r1_ct_list = list(lhs.cell_types.values())
             r2_ct_list = list(rhs.cell_types.values())
@@ -175,12 +180,23 @@ class Region(Mergeable):
                     ct_dists = np.delete(ct_dists, ct_min1_idx, axis=0)
                     ct_dists = np.delete(ct_dists, ct_min2_idx, axis=1)
                 dist = np.mean(dists)
+            elif linkage == 'homolog_mnn':
+                dists = []
+                # Nearest neighbors for the cell types from region 1
+                r1_ct_nn = np.argmin(ct_dists, axis=1)
+                # Nearest neighbors for the cell types from region 2
+                r2_ct_nn = np.argmin(ct_dists, axis=0)
+                # Only append distance if we find a mutual nearest neighbor
+                for i in range(r1_ct_nn.shape[0]):
+                    if r2_ct_nn[r1_ct_nn[i]] == i:
+                        dists.append(ct_dists[i, r1_ct_nn[i]])
+                num_ct_diff = lhs.num_cell_types + rhs.num_cell_types - (2 * len(dists))
+                dist = np.mean(dists)
             else:  # default to 'average':
                 dist = ct_dists.mean()
-
-            return dist
         else:
-            return Region._pairwise_diff(lhs.transcriptome, rhs.transcriptome, affinity, linkage)
+            dist = Region._pairwise_diff(lhs.transcriptome, rhs.transcriptome, affinity, linkage)
+        return dist, num_ct_diff
 
     def __repr__(self):
         return f'{self.id_num}{list(self.cell_types.values())}'
