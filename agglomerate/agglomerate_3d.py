@@ -2,7 +2,7 @@ from typing import List, Callable, Tuple, Optional, Dict, Union
 from queue import PriorityQueue
 from data.data_loader import DataLoader
 from itertools import combinations, product
-from data.data_types import Region, CellType, Edge, Mergeable
+from data.data_types import Region, CellType, Edge, Mergeable, LINKAGE_CELL_OPTIONS, LINKAGE_REGION_OPTIONS
 from tqdm import tqdm
 from matplotlib import cm
 import numpy as np
@@ -13,8 +13,6 @@ import functools
 # noinspection PyUnresolvedReferences
 from mpl_toolkits.mplot3d import Axes3D
 
-LINKAGE_CELL_OPTIONS = ['single', 'complete', 'average']
-LINKAGE_REGION_OPTIONS = ['single', 'complete', 'average', 'homolog_avg']
 TREE_SCORE_OPTIONS = ['ME', 'BME', 'MP']
 
 
@@ -196,6 +194,7 @@ class Agglomerate3D:
         ax.set_xlabel('Cell type', fontsize=20)
         ax.set_ylabel('Region', fontsize=20)
         ax.set_zlabel('Distance', fontsize=20)
+        ax.set(xticklabels=[], yticklabels=[])
         for line, color in zip(segments, colors):
             ax.plot(line[:, 0], line[:, 1], line[:, 2], color=color, lw=2)
         plt.show()
@@ -333,28 +332,51 @@ class Agglomerate3D:
                                                                       affinity=self.cell_type_affinity,
                                                                       linkage=self.linkage_cell,
                                                                       mask=self._ct_axis_mask)
+
+        # Find the cell types that have to be merged between the two regions
+        cts_merge: List[Tuple[CellType, CellType]] = []
+        dists: List[float] = []
+        if self.linkage_region == 'homolog_mnn':
+            # Nearest neighbors for the cell types from region 1
+            r1_ct_nn = np.argmin(pairwise_r_ct_dists, axis=1)
+            # Nearest neighbors for the cell types from region 2
+            r2_ct_nn = np.argmin(pairwise_r_ct_dists, axis=0)
+            # Only append distance if we find a mutual nearest neighbor
+            for i in range(r1_ct_nn.shape[0]):
+                if r2_ct_nn[r1_ct_nn[i]] == i:
+                    dists.append(pairwise_r_ct_dists[i, r1_ct_nn[i]])
+                    cts_merge.append((r1_ct_list[i], r2_ct_list[r1_ct_nn[i]]))
+        # otherwise just do a greedy pairing
+        else:
+            while np.prod(pairwise_r_ct_dists.shape) != 0:
+                ct_merge1_idx, ct_merge2_idx = np.unravel_index(np.argmin(pairwise_r_ct_dists),
+                                                                pairwise_r_ct_dists.shape)
+
+                # Append distance to dists and indices to index list
+                # noinspection PyArgumentList
+                dists.append(pairwise_r_ct_dists.min())
+                cts_merge.append((r1_ct_list[ct_merge1_idx], r2_ct_list[ct_merge2_idx]))
+
+                # remove from the distance matrix
+                pairwise_r_ct_dists = np.delete(pairwise_r_ct_dists, ct_merge1_idx, axis=0)
+                r1_ct_list.pop(ct_merge1_idx)
+                pairwise_r_ct_dists = np.delete(pairwise_r_ct_dists, ct_merge2_idx, axis=1)
+                r2_ct_list.pop(ct_merge2_idx)
+
+        assert len(dists) == len(cts_merge), 'Number distances not equal to number of cell type mergers.'
         # Continuously pair up cell types, merge them, add them to the new region, and delete them
-        while np.prod(pairwise_r_ct_dists.shape) != 0:
-            ct_merge1_idx, ct_merge2_idx = np.unravel_index(np.argmin(pairwise_r_ct_dists),
-                                                            pairwise_r_ct_dists.shape)
+        for dist, (ct1, ct2) in zip(dists, cts_merge):
             # create new cell type, delete old ones and remove from their regions
             # noinspection PyArgumentList
-            new_ct_id = self._merge_cell_types(r1_ct_list[ct_merge1_idx], r2_ct_list[ct_merge2_idx],
-                                               pairwise_r_ct_dists.min(), self._r_id_idx)
-
-            # remove from the distance matrix
-            pairwise_r_ct_dists = np.delete(pairwise_r_ct_dists, ct_merge1_idx, axis=0)
-            r1_ct_list.pop(ct_merge1_idx)
-            pairwise_r_ct_dists = np.delete(pairwise_r_ct_dists, ct_merge2_idx, axis=1)
-            r2_ct_list.pop(ct_merge2_idx)
+            new_ct_id = self._merge_cell_types(ct1, ct2, dist, self._r_id_idx)
 
             # add to our new region
             self.regions[self._r_id_idx].cell_types[new_ct_id] = self.cell_types[new_ct_id]
-        # Should have at least one empty region
-        assert r1.num_cell_types == 0 or r2.num_cell_types == 0, 'Both regions non-empty after primary merging.'
+        # Should have at least one empty region if not doing mutual nearest neighbors
+        if self.linkage_region != 'homolog_mnn':
+            assert r1.num_cell_types == 0 or r2.num_cell_types == 0, 'Both regions non-empty after primary merging.'
         # if there is a nonempty region, put the remainder of the cell types in the non-empty region into the new region
-        if r1.num_cell_types > 0 or r2.num_cell_types > 0:
-            r_leftover = r1 if r1.num_cell_types > 0 else r2
+        for r_leftover in (r1, r2):
             for ct in r_leftover.cell_types.values():
                 # Essentially copy the cell type but into a new region and with a new ID
                 new_ct = CellType(self._ct_id_idx, self._r_id_idx, ct.transcriptome)
@@ -484,9 +506,12 @@ class Agglomerate3D:
                 if np.abs(r1.num_cell_types - r2.num_cell_types) > self.max_region_diff:
                     continue
 
-                dist = Region.diff(r1, r2, affinity=self.region_affinity, linkage=self.linkage_region,
-                                   affinity2=self.cell_type_affinity, linkage2=self.linkage_cell,
-                                   mask=self._r_axis_mask)
+                dist, num_ct_diff = Region.diff(r1, r2, affinity=self.region_affinity, linkage=self.linkage_region,
+                                                affinity2=self.cell_type_affinity, linkage2=self.linkage_cell,
+                                                mask=self._r_axis_mask)
+                # If we're using region linkage homolog_mnn, then the number of cell types contained different may go up
+                if num_ct_diff > self.max_region_diff:
+                    continue
                 r_dists.put(Edge(dist, r1, r2))
 
             # Now go on to merge step!
