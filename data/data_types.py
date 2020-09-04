@@ -58,7 +58,7 @@ class Mergeable(ABC):
     @abstractmethod
     def diff(lhs: Mergeable, rhs: Mergeable, affinity: Callable, linkage: str,
              affinity2: Optional[Callable] = None, linkage2: Optional[str] = None,
-             mask: Optional[Sequence] = None):
+             mask: Optional[Sequence] = None, mask2: Optional[Sequence] = None):
         pass
 
 
@@ -97,7 +97,7 @@ class CellType(Mergeable):
     @staticmethod
     def diff(lhs: CellType, rhs: CellType, affinity: Callable, linkage: str,
              affinity2: Optional[Callable] = None, linkage2: Optional[str] = None,
-             mask: Optional[Sequence] = None):
+             mask: Optional[Sequence] = None, mask2: Optional[Sequence] = None):
         lt = lhs.transcriptome if mask is None else lhs.transcriptome[:, mask]
         rt = rhs.transcriptome if mask is None else rhs.transcriptome[:, mask]
         return CellType._pairwise_diff(lt, rt, affinity, linkage)
@@ -152,33 +152,53 @@ class Region(Mergeable):
     @staticmethod
     def diff(lhs: Region, rhs: Region, affinity: Callable, linkage: str,
              affinity2: Optional[Callable] = None, linkage2: Optional[str] = None,
-             mask: Optional[np.array] = None):
+             mask: Optional[np.array] = None, mask2: Optional[Sequence] = None):
+        """
+        Compute the distance between two regions.
+        :param lhs: The lhs region
+        :param rhs: The rhs region
+        :param affinity: Affinity for transcriptome comparisons for region distances
+        :param linkage: Linkage for region distances
+        :param affinity2: Affinity for transcriptome comparisons for cell types distances
+        :param linkage2: Linkage for cell type distances
+        :param mask: Region gene mask
+        :param mask2: Cell type gene mask
+        :return: dist, num_ct_diff
+        """
         # Difference in number of cell types contained. Only really matters for homolog_mnn since it can change there
         num_ct_diff = np.abs(lhs.num_cell_types - rhs.num_cell_types)
 
         if (lhs._transcriptome is None) or (rhs._transcriptome is None):
             if (affinity2 is None) or (linkage2 is None):
                 raise ValueError('Both affinity and linkage must be defined for cell types')
+            # Cell type dists using cell type gene mask
             ct_dists = np.zeros((lhs.num_cell_types, rhs.num_cell_types))
+            # Cell type dists using region gene mask
+            r_ct_dists = np.zeros((lhs.num_cell_types, rhs.num_cell_types))
             r1_ct_list = list(lhs.cell_types.values())
             r2_ct_list = list(rhs.cell_types.values())
             for r1_idx, r2_idx in product(range(lhs.num_cell_types), range(rhs.num_cell_types)):
+                # Use the cell type gene mask here because matching up sister cell types
                 ct_dists[r1_idx, r2_idx] = CellType.diff(r1_ct_list[r1_idx], r2_ct_list[r2_idx],
-                                                         affinity=affinity2, linkage=linkage2, mask=mask)
+                                                         affinity=affinity2, linkage=linkage2, mask=mask2)
+                r_ct_dists[r1_idx, r2_idx] = CellType.diff(r1_ct_list[r1_idx], r2_ct_list[r2_idx],
+                                                           affinity=affinity2, linkage=linkage2, mask=mask)
 
             if linkage == 'single':
-                dist = ct_dists.min()
+                dist = r_ct_dists.min()
             elif linkage == 'complete':
-                dist = ct_dists.max()
+                dist = r_ct_dists.max()
             elif linkage == 'homolog_avg':
                 dists = []
                 for i in range(np.min(ct_dists.shape)):
-                    # Add the distance between the two closest cell types (can consider as homologs)
-                    dists.append(ct_dists.min())
-                    # Delete these two homologs from the distance matrix
                     ct_min1_idx, ct_min2_idx = np.unravel_index(np.argmin(ct_dists), ct_dists.shape)
+                    # Add the distance between the two closest cell types (can consider as homologs)
+                    dists.append(r_ct_dists[ct_min1_idx, ct_min2_idx])
+                    # Delete these two homologs from the distance matrix
                     ct_dists = np.delete(ct_dists, ct_min1_idx, axis=0)
                     ct_dists = np.delete(ct_dists, ct_min2_idx, axis=1)
+                    r_ct_dists = np.delete(r_ct_dists, ct_min1_idx, axis=0)
+                    r_ct_dists = np.delete(r_ct_dists, ct_min2_idx, axis=1)
                 dist = np.mean(dists)
             elif linkage == 'homolog_mnn':
                 dists = []
@@ -189,11 +209,11 @@ class Region(Mergeable):
                 # Only append distance if we find a mutual nearest neighbor
                 for i in range(r1_ct_nn.shape[0]):
                     if r2_ct_nn[r1_ct_nn[i]] == i:
-                        dists.append(ct_dists[i, r1_ct_nn[i]])
+                        dists.append(r_ct_dists[i, r1_ct_nn[i]])
                 num_ct_diff = lhs.num_cell_types + rhs.num_cell_types - (2 * len(dists))
                 dist = np.mean(dists)
             else:  # default to 'average':
-                dist = ct_dists.mean()
+                dist = r_ct_dists.mean()
         else:
             dist = Region._pairwise_diff(lhs.transcriptome, rhs.transcriptome, affinity, linkage)
         return dist, num_ct_diff

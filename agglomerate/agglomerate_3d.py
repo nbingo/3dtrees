@@ -319,8 +319,6 @@ class Agglomerate3D:
         r1_ct_list = list(r1.cell_types.values())
         r2_ct_list = list(r2.cell_types.values())
 
-        num_ct_diff = np.abs(r1.num_cell_types - r2.num_cell_types)
-
         if self.verbose:
             print(f'Merging regions {r1} and {r2} into new region {self._r_id_idx}\n{{')
 
@@ -364,6 +362,7 @@ class Agglomerate3D:
                 r2_ct_list.pop(ct_merge2_idx)
 
         assert len(dists) == len(cts_merge), 'Number distances not equal to number of cell type mergers.'
+        num_ct_diff = r1.num_cell_types + r2.num_cell_types - (2 * len(cts_merge))
         # Continuously pair up cell types, merge them, add them to the new region, and delete them
         for dist, (ct1, ct2) in zip(dists, cts_merge):
             # create new cell type, delete old ones and remove from their regions
@@ -508,7 +507,7 @@ class Agglomerate3D:
 
                 dist, num_ct_diff = Region.diff(r1, r2, affinity=self.region_affinity, linkage=self.linkage_region,
                                                 affinity2=self.cell_type_affinity, linkage2=self.linkage_cell,
-                                                mask=self._r_axis_mask)
+                                                mask=self._r_axis_mask, mask2=self._ct_axis_mask)
                 # If we're using region linkage homolog_mnn, then the number of cell types contained different may go up
                 if num_ct_diff > self.max_region_diff:
                     continue
