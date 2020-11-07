@@ -5,7 +5,7 @@ with open("README.md", "r") as fh:
 
 setuptools.setup(
     name="3dtrees-nbingo",
-    version="0.1.4",
+    version="0.1.5",
     author="Noam Ringach, Justus Kebschull",
     author_email="nomir@cs.stanford.edu",
     description="A package for creating 3D phylogenetic trees with two axes of variation.",
