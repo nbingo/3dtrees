@@ -81,6 +81,7 @@ class Agglomerate3D:
         colormap = cm.get_cmap('hsv')(np.linspace(0, 1, num_regions))
         fig = plt.figure()
         ax = fig.gca(projection='3d')
+        direction = {}
 
         def find_ct_index_region(ct_id: int, index: int) -> Tuple[Union[int, None], Union[int, None]]:
             if np.isnan(ct_id):
@@ -125,6 +126,7 @@ class Agglomerate3D:
                 r_index = ct2_index
                 r_id = ct2_id
                 r_region = ct2_region
+                direction[region] = "l"
             else:
                 l_index = ct2_index
                 l_id = ct2_id
@@ -132,14 +134,20 @@ class Agglomerate3D:
                 r_index = ct1_index
                 r_id = ct1_id
                 r_region = ct1_region
+                direction[region] = "r"
+
+            if (direction[region]=="r")
+                h_start[split_axis] += offset
+                h_end[split_axis] -= offset
+            else
+                h_start[split_axis] -= offset
+                h_end[split_axis] += offset
 
             # horizontal x/y-axis bar
             # Start is the left side
             h_start = root_pos.copy()
-            h_start[split_axis] -= offset
             # end is the right side
             h_end = root_pos.copy()
-            h_end[split_axis] += offset
             segments.append([h_start, root_pos])
             colors.append(colormap[l_region])
             # Don't do if just transferring one cell type to another region
